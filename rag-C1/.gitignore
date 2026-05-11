@@ -1,0 +1,41 @@
+# Credenciales y secretos
+.env
+*.env
+.env.local
+
+# Entornos virtuales
+venv/
+env/
+pln3/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Datos pesados / corpus (ajustar según necesidad)
+corpus/*.pdf
+data/*.jsonl
+data/*.csv
+
+# Logs y outputs
+*.log
+outputs/
+mlruns/
