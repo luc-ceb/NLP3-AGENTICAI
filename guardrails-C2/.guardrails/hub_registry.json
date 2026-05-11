@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "validators": {
+    "guardrails/valid_json": {
+      "import_path": "guardrails_grhub_valid_json",
+      "exports": [
+        "ValidJson"
+      ],
+      "installed_at": "2026-05-10T18:07:21.611254+00:00",
+      "package_name": "guardrails-grhub-valid-json"
+    },
+    "guardrails/regex_match": {
+      "import_path": "guardrails_grhub_regex_match",
+      "exports": [
+        "RegexMatch"
+      ],
+      "installed_at": "2026-05-10T18:07:31.797954+00:00",
+      "package_name": "guardrails-grhub-regex-match"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+# Credenciales
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Entornos virtuales (por si alguien crea uno adentro del repo)
+.venv/
+venv/
+env/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+
+# Datos locales — descomentar si aplica
+# corpus/*.pdf
+# data/
