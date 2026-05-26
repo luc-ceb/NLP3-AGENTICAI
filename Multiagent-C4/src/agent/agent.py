@@ -23,7 +23,7 @@ from .state import State
 # ---------------------------------------------------------------------
 # Configuración de modelos (all-Ollama)
 # ---------------------------------------------------------------------
-REASONING_MODEL = "qwen3:30b-a3b"   # supervisor (MoE, 3B activos)
+REASONING_MODEL = "qwen3:14b"
 WORKER_MODEL    = "qwen3:8b"        # agentes simples + summarization
 TEMPERATURE     = 0.1
 

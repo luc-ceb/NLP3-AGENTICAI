@@ -1,6 +1,6 @@
 # Multiagent C4 — Sistema Multiagente con LangGraph
 
-Implementación de un sistema multiagente colaborativo basado en **LangGraph** para búsqueda y resumen de papers científicos. 
+Implementación de un sistema multiagente colaborativo basado en **LangGraph** para búsqueda y resumen de papers científicos.
 
 ---
 
@@ -10,29 +10,16 @@ Implementación de un sistema multiagente colaborativo basado en **LangGraph** p
 
 El sistema implementa un patrón **supervisor + workers**:
 
-- **Supervisor**: orquesta el flujo, decide qué agente invocar según la query del usuario, y consolida los resultados. Utiliza un modelo de razonamiento.
+- **Supervisor**: orquesta el flujo, decide qué agente invocar según la query del usuario, y consolida los resultados. Utiliza un modelo de razonamiento (`qwen3:14b`).
 - **ResearchAssistant**: agente equipado con tools de **ArXiv** y **Wikipedia** para recuperar información actualizada.
 - **SummarizerAgent**: agente especializado en resumir contenido recibido del Research Assistant.
 - **SummarizationNode**: comprime el historial conversacional cuando supera un umbral de tokens, para mantener el contexto manejable.
 
 La memoria de corto plazo se mantiene con `InMemorySaver` y `InMemoryStore`, identificada por un `thread_id` por sesión.
 
----
-
-## Modificaciones respecto al upstream
-
-| Componente | Upstream original | Esta versión |
-|---|---|---|
-| Provider | Groq + Ollama (híbrido con fallback) | **All-Ollama** |
-| Supervisor LLM | `llama3.2:latest` | `qwen3:30b-a3b` con `reasoning=True` |
-| ResearchAssistant LLM | Groq (`openai/gpt-oss-120b`) | `qwen3:8b` sin thinking |
-| SummarizerAgent LLM | `llama3.2:latest` | `qwen3:8b` sin thinking |
-| Summarization node LLM | `llama3.2:latest` | `qwen3:8b` sin thinking |
-| Estructura del código | Clases `LLMProvider` / `ResearchAssistant` / `SummarizerAgent` | Factory functions + agentes como variables módulo |
-
 **Justificación de los modelos elegidos:**
 
-- `qwen3:30b-a3b` (MoE, 30B params / 3B activos) en el supervisor: el rol de coordinación requiere razonamiento explícito para decidir delegación; la arquitectura MoE mantiene la inferencia razonablemente rápida pese al tamaño.
+- `qwen3:14b` en el supervisor: el rol de coordinación requiere razonamiento explícito para decidir delegación. Con 16 GB de VRAM, usar 14b (~9 GB) permite que ambos modelos (supervisor + worker) convivan sin swapping, mejorando latencia. Alternativa (más potencia, más lentitud): `qwen3:30b-a3b` requiere ~18 GB y causa swapping frecuente entre supervisor y workers.
 - `qwen3:8b` en los workers: los agentes que ejecutan tools o tareas concretas funcionan mejor sin thinking — los tokens de razonamiento intercalados pueden interferir con el parsing de tool calls.
 - Thinking explícitamente desactivado en workers con doble candado (`reasoning=False` + `model_kwargs={"think": False}`) por el [bug conocido](https://github.com/langchain-ai/langchain/issues/33993) donde Qwen3 ignora `reasoning=False` en `langchain-ollama`.
 
@@ -44,10 +31,10 @@ La memoria de corto plazo se mantiene con `InMemorySaver` y `InMemoryStore`, ide
 - **Ollama** corriendo en `localhost:11434`
 - Modelos descargados:
   ```bash
-  ollama pull qwen3:30b-a3b
+  ollama pull qwen3:14b
   ollama pull qwen3:8b
   ```
-- GPU recomendada con ≥16 GB VRAM (para correr ambos modelos con swapping aceptable). En su defecto, ver [notas operativas](#notas-operativas).
+- GPU recomendada con ≥12 GB VRAM (ambos modelos entran sin swapping: 14b ≈9 GB + 8b ≈3-5 GB). En su defecto, ver [notas operativas](#notas-operativas).
 
 ---
 
@@ -86,7 +73,7 @@ Verás un prompt interactivo:
 
 ```
 Research Assistant (LangGraph + Ollama)
-  Supervisor: qwen3:30b-a3b (reasoning ON)
+  Supervisor: qwen3:14b (reasoning ON)
   Workers:    qwen3:8b (reasoning OFF)
 Type 'exit' to quit.
 
@@ -135,12 +122,7 @@ Multiagent-C4/
 
 ### VRAM y swapping de modelos
 
-Con 16 GB de VRAM, **ambos modelos no entran simultáneamente** (qwen3:30b-a3b ≈18 GB + qwen3:8b ≈5 GB). Ollama hace swap entre ellos cuando el flujo pasa del supervisor a un worker y viceversa, lo que agrega latencia por carga.
-
-Alternativas:
-
-- **Reducir el supervisor a `qwen3:14b`** (~9 GB): los dos modelos caben juntos, sin swapping. Se pierde algo de calidad de razonamiento pero se gana mucha velocidad.
-- **Mantener modelos warm** con `keep_alive=-1` en `ChatOllama` o vía `OLLAMA_KEEP_ALIVE=-1` env var, para evitar descargas por timeout.
+Con la configuración actual (**qwen3:14b** supervisor + **qwen3:8b** workers), ambos modelos caben en VRAM sin swapping (~14 GB total en GPU de 16 GB), evitando latencia por recargas.
 
 ### Cold start vs warm
 
