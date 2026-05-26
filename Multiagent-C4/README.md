@@ -6,7 +6,7 @@ Implementación de un sistema multiagente colaborativo basado en **LangGraph** p
 
 ## Arquitectura
 
-![Arquitectura del sistema multiagente](Codigo/agent_arch.png)
+![Arquitectura del sistema multiagente](agent_arch.png)
 
 El sistema implementa un patrón **supervisor + workers**:
 
