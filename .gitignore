@@ -30,3 +30,7 @@ env/
 # Datos locales — descomentar si aplica
 # corpus/*.pdf
 # data/
+
+Agentic-digital-twin/.venv/
+
+Agentic-digital-twin/gdo/data/
