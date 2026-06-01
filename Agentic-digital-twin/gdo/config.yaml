@@ -1,0 +1,9 @@
+data:
+  raw_dir: data/raw
+  db_path: data/gdo.duckdb
+analyst:
+  max_retries: 1
+llm:
+  provider: ollama        # ollama | static
+  model: qwen2.5-coder:7b
+  temperature: 0.0
