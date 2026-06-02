@@ -21,7 +21,7 @@ Reglas:
 - Nunca uses INSERT/UPDATE/DELETE/DROP ni otras sentencias de escritura.
 - Si la pregunta es ambigua, elegí la interpretación más razonable.
 - Devolvé SOLO la consulta SQL, sin explicaciones ni backticks.
-
+{hints}
 Esquema:
 {schema}
 
@@ -55,17 +55,19 @@ class SQLResult:
 class TextToSQLAnalyst:
     """Traduce preguntas en lenguaje natural a SQL, valida y ejecuta."""
 
-    def __init__(self, con: duckdb.DuckDBPyConnection, llm, max_retries: int = 1):
+    def __init__(self, con: duckdb.DuckDBPyConnection, llm, max_retries: int = 1,
+                 hints: str = ""):
         self.con = con
         self.llm = llm
         self.max_retries = max_retries
+        self.hints = hints
         self.allowed = list_tables(con)
         self.schema = get_schema_context(con)
 
     def ask(self, question: str) -> SQLResult:
         sql, last_reason = "", ""
         for attempt in range(self.max_retries + 1):
-            prompt = SQL_PROMPT.format(schema=self.schema, question=question)
+            prompt = SQL_PROMPT.format(schema=self.schema, question=question, hints=self.hints)
             if attempt > 0:
                 prompt += f"\n(El intento anterior fue inválido: {last_reason}. Corregilo.)"
             sql = _extract_sql(self.llm.complete(prompt))
