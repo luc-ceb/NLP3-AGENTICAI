@@ -81,10 +81,11 @@ class DiagnosisResult:
 
 
 class SupervisorAgent:
-    def __init__(self, analyst, auditor, llm, max_claims: int = 3):
+    def __init__(self, analyst, auditor, llm, reconcile_llm=None, max_claims: int = 3):
         self.analyst = analyst
         self.auditor = auditor
-        self.llm = llm
+        self.llm = llm                              # nivel FAST: claims (+ resto si no se rutea)
+        self.reconcile_llm = reconcile_llm or llm   # nivel REASON: diagnóstico final
         self.max_claims = max_claims
         self.app = self._build()
 
@@ -131,7 +132,7 @@ class SupervisorAgent:
     def _reconcile(self, state: GDOState) -> dict:
         findings = "\n".join(
             f"- {a['claim']} -> {a['verdict']}: {a['justification']}" for a in state["audits"])
-        out = _parse_json(self.llm.complete(RECONCILE_PROMPT.format(
+        out = _parse_json(self.reconcile_llm.complete(RECONCILE_PROMPT.format(
             question=state["question"], facts=state["facts"], findings=findings)))
         text = out.get("diagnostico", "") or "Sin diagnóstico."
         if out.get("causa_raiz"):

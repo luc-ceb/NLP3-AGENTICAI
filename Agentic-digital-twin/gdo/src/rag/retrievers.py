@@ -87,3 +87,31 @@ class DenseRetriever:
                 continue
             out.append(Hit(self.meta[i]["chunk_id"], self.meta[i], float(scores[0][rank]), "dense"))
         return out
+
+
+class PineconeDenseRetriever:
+    """Retriever denso respaldado por Pinecone (vector database online).
+
+    Embebe la consulta localmente (mismo Embedder MiniLM con que se indexó) y
+    consulta Pinecone por similitud coseno. Devuelve Hits con el chunk en metadata.
+    """
+
+    def __init__(self, index_name: str | None = None, embedder: Embedder | None = None,
+                 namespace: str | None = None, api_key: str | None = None):
+        import os
+        from pinecone import Pinecone  # carga perezosa
+        pc = Pinecone(api_key=api_key or os.getenv("PINECONE_API_KEY"))
+        self.index = pc.Index(index_name or os.getenv("PINECONE_INDEX", "gdo"))
+        self.namespace = namespace if namespace is not None else os.getenv("PINECONE_NAMESPACE", "")
+        self.embedder = embedder or Embedder()
+
+    def search(self, query: str, k: int = 10) -> list[Hit]:
+        vec = self.embedder.encode([query])[0].tolist()
+        res = self.index.query(vector=vec, top_k=k, include_metadata=True,
+                               namespace=self.namespace or None)
+        hits: list[Hit] = []
+        for m in (res.get("matches") or []):
+            md = dict(m.get("metadata") or {})
+            md["chunk_id"] = m["id"]
+            hits.append(Hit(m["id"], md, float(m["score"]), "dense"))
+        return hits

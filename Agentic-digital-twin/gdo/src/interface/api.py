@@ -54,14 +54,14 @@ def build_supervisor():
     from ..agents.auditor_rag import NormativeAuditor
     from ..rag.retrieve import HybridRetriever
     from ..agents.supervisor import SupervisorAgent
-    from ..llm.clients import OllamaClient
+    from ..llm.clients import make_llm
 
     con = duckdb.connect(str(ROOT / "data" / "gdo.duckdb"), read_only=True)
-    sql_llm = OllamaClient(model=os.getenv("SQL_MODEL", "qwen2.5-coder:14b"))
-    reason_llm = OllamaClient(model=os.getenv("REASON_MODEL") or os.getenv("OLLAMA_MODEL", "qwen3:14b"))
-    analyst = TextToSQLAnalyst(con, sql_llm, hints=HINTS)
-    auditor = NormativeAuditor(HybridRetriever.build_default(ROOT / "data" / "index"), reason_llm)
-    return SupervisorAgent(analyst, auditor, reason_llm)
+    fast_llm = make_llm(os.getenv("FAST_MODEL"), provider=os.getenv("FAST_PROVIDER", "groq"))
+    reason_llm = make_llm(os.getenv("REASON_MODEL"), provider=os.getenv("REASON_PROVIDER", "anthropic"))
+    analyst = TextToSQLAnalyst(con, fast_llm, hints=HINTS)
+    auditor = NormativeAuditor(HybridRetriever.build_default(ROOT / "data" / "index"), fast_llm)
+    return SupervisorAgent(analyst, auditor, llm=fast_llm, reconcile_llm=reason_llm)
 
 
 def create_app(supervisor=None, notifier=None, api_key: str | None = None) -> FastAPI:

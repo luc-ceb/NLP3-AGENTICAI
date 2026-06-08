@@ -1,0 +1,42 @@
+[
+  {
+    "id": "q15",
+    "expected": "no_cumple",
+    "got": [
+      "no_cumple"
+    ],
+    "verdict_ok": true,
+    "cite_ok": true
+  },
+  {
+    "id": "q16",
+    "expected": "sin_norma",
+    "got": [
+      "sin_norma",
+      "sin_norma",
+      "sin_norma"
+    ],
+    "verdict_ok": true,
+    "cite_ok": true
+  },
+  {
+    "id": "q17",
+    "expected": "sin_norma",
+    "got": [
+      "sin_norma"
+    ],
+    "verdict_ok": true,
+    "cite_ok": true
+  },
+  {
+    "id": "q18",
+    "expected": "sin_norma",
+    "got": [
+      "sin_norma",
+      "sin_norma",
+      "sin_norma"
+    ],
+    "verdict_ok": true,
+    "cite_ok": true
+  }
+]

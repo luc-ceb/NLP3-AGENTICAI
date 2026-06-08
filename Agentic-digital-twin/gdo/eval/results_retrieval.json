@@ -1,0 +1,146 @@
+{
+  "per_question": [
+    {
+      "id": "q01",
+      "category": "cadena_frio",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "p@5": 1.0
+    },
+    {
+      "id": "q02",
+      "category": "cadena_frio",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "p@5": 1.0
+    },
+    {
+      "id": "q03",
+      "category": "cadena_frio",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.7737459235132745,
+      "p@5": 0.2
+    },
+    {
+      "id": "q04",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.8519590445170673,
+      "p@5": 0.4
+    },
+    {
+      "id": "q05",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.9796825595768973,
+      "p@5": 1.0
+    },
+    {
+      "id": "q06",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.961701088650451,
+      "p@5": 0.8
+    },
+    {
+      "id": "q07",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "p@5": 1.0
+    },
+    {
+      "id": "q08",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "p@5": 1.0
+    },
+    {
+      "id": "q09",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.9492756620369743,
+      "p@5": 0.8
+    },
+    {
+      "id": "q10",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 0.5,
+      "ndcg@10": 0.7668878296761484,
+      "p@5": 0.6
+    },
+    {
+      "id": "q11",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.9911205770005563,
+      "p@5": 1.0
+    },
+    {
+      "id": "q12",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.9888009031441519,
+      "p@5": 1.0
+    },
+    {
+      "id": "q13",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "p@5": 1.0
+    },
+    {
+      "id": "q14",
+      "category": "procedimiento",
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.9838048780283076,
+      "p@5": 0.8
+    },
+    {
+      "id": "q15",
+      "category": "cadena_frio",
+      "hit@5": 0.0,
+      "hit@10": 1.0,
+      "mrr": 0.1,
+      "ndcg@10": 0.2890648263178879,
+      "p@5": 0.0
+    }
+  ],
+  "aggregate": {
+    "hit@5": 0.933,
+    "hit@10": 1.0,
+    "mrr": 0.907,
+    "ndcg@10": 0.902,
+    "p@5": 0.773
+  }
+}

@@ -26,7 +26,7 @@ from src.agents.analyst_sql import TextToSQLAnalyst       # noqa: E402
 from src.rag.retrieve import HybridRetriever              # noqa: E402
 from src.agents.auditor_rag import NormativeAuditor       # noqa: E402
 from src.agents.supervisor import SupervisorAgent         # noqa: E402
-from src.llm.clients import OllamaClient                  # noqa: E402
+from src.llm.clients import make_llm                   # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -50,20 +50,24 @@ HINTS = (
 PREGUNTA = "¿Cuántas quejas de mala experiencia mencionan que el helado estaba derretido o blando?"
 
 if __name__ == "__main__":
-    sql_model = os.getenv("SQL_MODEL", "qwen2.5-coder:14b")
-    reason_model = os.getenv("REASON_MODEL") or os.getenv("OLLAMA_MODEL", "qwen3:14b")
-    print(f"SQL_MODEL={sql_model}  |  REASON_MODEL={reason_model}\n")
+    fast_provider = os.getenv("FAST_PROVIDER", "groq")
+    reason_provider = os.getenv("REASON_PROVIDER", "anthropic")
+    fast_model = os.getenv("FAST_MODEL")
+    reason_model = os.getenv("REASON_MODEL")
+    print(f"FAST={fast_provider}:{fast_model or '(default)'} | "
+          f"REASON={reason_provider}:{reason_model or '(default)'} | "
+          f"backend={os.getenv('VECTOR_BACKEND', 'pinecone')}\n")
 
     if not DB.exists():
         load_sources(ROOT / "data" / "raw", DB)
     con = duckdb.connect(str(DB), read_only=True)
 
-    sql_llm = OllamaClient(model=sql_model)       # rápido, especializado en SQL
-    reason_llm = OllamaClient(model=reason_model)  # razonamiento para reconciliar
+    fast_llm = make_llm(fast_model, provider=fast_provider)      # SQL, grader, rewrite, claims
+    reason_llm = make_llm(reason_model, provider=reason_provider)  # reconcile (diagnóstico final)
 
-    analyst = TextToSQLAnalyst(con, sql_llm, hints=HINTS)
-    auditor = NormativeAuditor(HybridRetriever.build_default(INDEX), reason_llm)
-    supervisor = SupervisorAgent(analyst, auditor, reason_llm)
+    analyst = TextToSQLAnalyst(con, fast_llm, hints=HINTS)
+    auditor = NormativeAuditor(HybridRetriever.build_default(INDEX), fast_llm)
+    supervisor = SupervisorAgent(analyst, auditor, llm=fast_llm, reconcile_llm=reason_llm)
 
     res = supervisor.diagnose(PREGUNTA)
     print("=" * 80)

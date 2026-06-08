@@ -127,6 +127,7 @@ class NormativeAuditor:
                                [], grade, attempt, passages)
 
         v = self._verdict(claim, self.retriever.format_context(passages))
-        citas = v.get("citas") or [p.citation for p in passages[:3]]
+        # citas atadas a los pasajes REALES recuperados (no a lo que transcribe el LLM)
+        citas = [p.citation for p in passages]
         return AuditResult(claim, v.get("veredicto", "sin_norma"),
                            v.get("justificacion", ""), citas, grade, attempt, passages)

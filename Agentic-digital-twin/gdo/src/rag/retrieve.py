@@ -40,9 +40,15 @@ class HybridRetriever:
 
     @classmethod
     def build_default(cls, index_dir: str | Path, embedder: Embedder | None = None,
-                      rerank: bool = True):
-        """Constructor de producción (carga modelos reales de HuggingFace)."""
-        dense = DenseRetriever(index_dir, embedder=embedder)
+                      rerank: bool = True, vector_backend: str | None = None):
+        """Constructor de producción (carga modelos reales / conecta a Pinecone)."""
+        import os
+        backend = (vector_backend or os.getenv("VECTOR_BACKEND", "pinecone")).lower()
+        if backend == "pinecone":
+            from .retrievers import PineconeDenseRetriever
+            dense = PineconeDenseRetriever(embedder=embedder)
+        else:
+            dense = DenseRetriever(index_dir, embedder=embedder)
         sparse = BM25Retriever(index_dir)
         reranker = None
         if rerank:

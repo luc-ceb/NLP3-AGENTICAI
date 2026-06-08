@@ -47,14 +47,50 @@ def build_dense_index(chunks: list[dict], out_dir: Path,
 
 
 def build_all(chunks_path: str | Path, out_dir: str | Path,
-              embedder: Embedder | None = None) -> None:
+              embedder: Embedder | None = None, vector_backend: str | None = None) -> None:
+    import os
+    backend = (vector_backend or os.getenv("VECTOR_BACKEND", "pinecone")).lower()
     chunks = _load_chunks(chunks_path)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    # meta compartido, en el mismo orden con el que se construyen los índices
+    # meta + BM25 (disperso) siempre local
     with (out / "meta.jsonl").open("w", encoding="utf-8") as f:
         for c in chunks:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
     build_bm25_index(chunks, out)
-    build_dense_index(chunks, out, embedder=embedder)
-    log.info("Índices listos en %s", out)
+    if backend == "pinecone":
+        build_pinecone_index(chunks, embedder=embedder)
+    else:
+        build_dense_index(chunks, out, embedder=embedder)
+    log.info("Índices listos (denso=%s) en %s", backend, out)
+
+
+def build_pinecone_index(chunks: list[dict], embedder: Embedder | None = None,
+                         index_name: str | None = None, namespace: str | None = None,
+                         batch_size: int = 100, api_key: str | None = None,
+                         cloud: str | None = None, region: str | None = None) -> None:
+    """Embebe los chunks (MiniLM local) y los upsertea a un índice Pinecone."""
+    import os
+    from pinecone import Pinecone, ServerlessSpec
+
+    embedder = embedder or Embedder()
+    name = index_name or os.getenv("PINECONE_INDEX", "gdo")
+    ns = namespace if namespace is not None else os.getenv("PINECONE_NAMESPACE", "")
+    pc = Pinecone(api_key=api_key or os.getenv("PINECONE_API_KEY"))
+
+    embs = embedder.encode([c["text"] for c in chunks])
+    dim = int(embs.shape[1])
+    if not pc.has_index(name):
+        pc.create_index(name=name, dimension=dim, metric="cosine",
+                        spec=ServerlessSpec(cloud=cloud or os.getenv("PINECONE_CLOUD", "aws"),
+                                            region=region or os.getenv("PINECONE_REGION", "us-east-1")))
+    index = pc.Index(name)
+
+    vectors = []
+    for c, e in zip(chunks, embs):
+        md = {k: v for k, v in c.items() if v is not None}  # Pinecone no acepta null
+        vectors.append({"id": c["chunk_id"], "values": e.tolist(), "metadata": md})
+    for i in range(0, len(vectors), batch_size):
+        index.upsert(vectors=vectors[i:i + batch_size], namespace=ns or None)
+    log.info("Pinecone: %d vectores upserted en '%s' (dim=%d, ns=%s)",
+             len(vectors), name, dim, ns or "default")
