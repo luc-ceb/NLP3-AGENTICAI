@@ -3,8 +3,8 @@
 No es un harness formal (Hit@k/MRR/nDCG viven en metrics.py). Verifica las
 propiedades clave del Caso 2 y Caso 5:
 
-  - Sin LLM: el ranking ordena las 6 sucursales; la abstención (sin desvío) no
-    invoca al LLM.
+  - Sin LLM: el ranking ordena todas las sucursales; la abstención (sin desvío)
+    no invoca al LLM.
   - Con LLM (--with-llm): Caso 2 cita cuando actúa; la consulta normativa cita
     cuando el manual cubre y se abstiene cuando no; Caso 5 produce reporte.
 
@@ -26,16 +26,16 @@ class Check:
 
 # --- chequeos sin LLM (determinísticos, rápidos) ---
 
-def check_ranking_6_pdvs(con, mes: str) -> Check:
-    """El ranking de severidad cubre las 6 sucursales y queda ordenado."""
+def check_ranking_pdvs(con, mes: str) -> Check:
+    """El ranking de severidad cubre todas las sucursales y queda ordenado."""
     pdvs = list_pdvs(con)
     pares = [(p, detectar_desvio(compute_kpis(con, p, mes))) for p in pdvs]
     ordenados = sorted(pares, key=lambda t: t[1].orden if t[1] else (99, 0.0))
     claves = [t[1].orden if t[1] else (99, 0.0) for t in ordenados]
     monotono = all(claves[i] <= claves[i + 1] for i in range(len(claves) - 1))
     n = len(pdvs)
-    ok = n == 6 and monotono
-    return Check("ranking_6_pdvs", ok,
+    ok = n >= 1 and monotono
+    return Check("ranking_pdvs", ok,
                  f"{n} sucursales, orden {'monótono' if monotono else 'INCONSISTENTE'} "
                  f"por (prioridad, -severidad)")
 
@@ -107,11 +107,11 @@ def check_norma_cita_y_abstiene(retriever, llm) -> Check:
 
 
 def check_caso5_reporte(plan, mes: str) -> Check:
-    """Caso 5 produce un reporte con las 6 sucursales en el ranking."""
+    """Caso 5 produce un reporte con todas las sucursales en el ranking."""
     res = plan.generar(mes)
     n = len(res.resultados)
     tiene_tabla = "Ranking de sucursales" in res.reporte
-    ok = n == 6 and tiene_tabla and len(res.reporte) > 0
+    ok = n == len(list_pdvs(plan.con)) and tiene_tabla and len(res.reporte) > 0
     return Check("caso5_reporte", ok,
                  f"{n} sucursales en el plan, reporte {'con' if tiene_tabla else 'SIN'} "
                  f"ranking ({len(res.reporte)} chars)")
@@ -121,7 +121,7 @@ def run_checks(con, mes: str | None = None, with_llm: bool = False,
                build_llm=None, build_retriever=None) -> list[Check]:
     """Corre los chequeos. Sin ``with_llm`` solo los determinísticos (sin red)."""
     mes = mes or latest_month(con, complete_only=True)
-    checks = [check_ranking_6_pdvs(con, mes), check_abstencion_sin_llm(con, mes)]
+    checks = [check_ranking_pdvs(con, mes), check_abstencion_sin_llm(con, mes)]
     if with_llm:
         from ..agents.auditor_rag import NormativeAuditor
         from ..agents.caso2 import DiagnosticadorPDV

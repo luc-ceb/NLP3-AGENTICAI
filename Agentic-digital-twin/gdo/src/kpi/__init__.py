@@ -1,12 +1,11 @@
-"""KPIs determinísticos del Caso 2 (volumen/tráfico por PDV y mes).
+"""KPIs determinísticos del Caso 2 (volumen y facturación por PDV y mes).
 
 Sin Text-to-SQL: las métricas se calculan con SQL fija y robusta (decisión de
-diseño del MVP). Solo se usan columnas de volumen (no hay precio/ingreso):
-kilos, unidades, visitas (proxy de ticket) y clientes únicos.
-
-Nota de datos: `numero` NO es un id de ticket — tiene 6 valores 1:1 con las 6
-sucursales (es un código de sucursal/lista). El proxy de "ticket" es la VISITA:
-una compra de un cliente en una sucursal un día -> distinct (customerid, fecha).
+diseño del MVP). La fuente es agregada diaria por (sucursal, producto), sin
+clientes/tickets/unidades, así que los KPIs son de **volumen** (kilos) y
+**facturación estimada** (Σ kilos × precio, proxy: el precio es por unidad). El
+% en promoción acompaña como contexto. Eje temporal: interanual sobre kilos
+(volumen real, sin inflación); la facturación se compara solo vs la red.
 """
 from .metrics import PDVKpis, ProductoKpi, compute_kpis, latest_month, list_pdvs
 from .deviations import Desvio, detectar_desvio

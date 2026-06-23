@@ -1,6 +1,6 @@
 """Caso 5 — Plan mensual de diagnóstico (LangGraph que envuelve al Caso 2).
 
-Itera el Caso 2 sobre las 6 sucursales para un mismo mes, las rankea por
+Itera el Caso 2 sobre todas las sucursales para un mismo mes, las rankea por
 severidad del desvío y produce un reporte mensual en Markdown.
 
 Grafo:  diagnosticos --> sintetizar --> END
@@ -71,7 +71,7 @@ def _estado(r: Caso2Result) -> str:
 
 # Alcance del desvío por nivel de prioridad: explica por qué un desvío de tienda
 # vs la red rankea sobre una caída de producto de % mayor pero impacto local.
-_ALCANCE = {0: "Sucursal vs red", 1: "Mes a mes", 2: "Producto"}
+_ALCANCE = {0: "Sucursal vs red", 1: "Interanual", 2: "Producto"}
 
 
 def _alcance(r: Caso2Result) -> str:

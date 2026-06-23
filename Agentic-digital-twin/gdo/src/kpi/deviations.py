@@ -3,13 +3,13 @@
 A partir de un :class:`PDVKpis` arma candidatos a desvío y elige el MÁS relevante
 para diagnosticar contra el manual (Caso 2).
 
-Prioridad (decisión de diseño): se prioriza el desempeño **vs la red** sobre la
-variación **interanual** (YoY). Ambas comparaciones están libres de estacionalidad
-—la red se compara en el mismo mes y la interanual contra el mismo mes del año
-anterior—, pero miden cosas distintas: vs red aísla a la sucursal que desentona
-de sus pares hoy, mientras que la interanual detecta el deterioro propio respecto
-de un año atrás (incluso si toda la red cayó). Se usa vs red como señal primaria
-y la interanual como fallback/contexto; las caídas de producto quedan como apoyo.
+Prioridad (decisión de diseño): se prioriza el desempeño **vs la red** (volumen y
+facturación contra la media de la red en el mismo mes) sobre la variación
+**interanual** (YoY de kilos). Ambas comparaciones están libres de estacionalidad,
+pero miden cosas distintas: vs red aísla a la sucursal que desentona de sus pares
+hoy, mientras que la interanual detecta el deterioro propio respecto de un año
+atrás. La facturación SOLO se evalúa vs red (su YoY estaría dominado por la
+inflación). Las caídas de producto y la intensidad de promoción quedan como apoyo.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ class Desvio:
     prioridad: int          # nivel operativo (PRIO_VS_RED < PRIO_YOY < PRIO_PRODUCTO)
     detalle: str            # frase descriptiva con cifras
     hipotesis: str          # hipótesis operativa para auditar contra la norma
-    contexto: list[str] = field(default_factory=list)  # señales de apoyo (YoY, productos)
+    contexto: list[str] = field(default_factory=list)  # señales de apoyo (YoY, promo, productos)
 
     @property
     def es_relevante(self) -> bool:
@@ -80,41 +80,25 @@ def _vs_red(k: PDVKpis) -> list[Desvio]:
             "Volumen de la sucursal por debajo de la media de la red en el mismo "
             "mes (desempeño propio, no estacional); revisar estándares de "
             "conservación, exhibición y cadena de frío del manual."),
-        _mk("visitas_red", "Tráfico de visitas vs red", k.visitas_var_red, PRIO_VS_RED,
-            f"Visitas {k.visitas} vs media de la red {k.visitas_red_media:.0f} "
-            f"({k.visitas_var_red:+.1f}%)." if k.visitas_var_red is not None else "",
-            "Tráfico de la sucursal por debajo de la media de la red; revisar "
-            "atención al cliente, horarios y experiencia en el local según la norma."),
-        _mk("clientes_red", "Clientes únicos vs red", k.clientes_var_red, PRIO_VS_RED,
-            f"Clientes {k.clientes} vs media de la red {k.clientes_red_media:.0f} "
-            f"({k.clientes_var_red:+.1f}%)." if k.clientes_var_red is not None else "",
-            "Clientes únicos por debajo de la media de la red; revisar "
-            "fidelización y calidad de servicio según la norma."),
+        _mk("facturacion_red", "Facturación vs red", k.facturacion_var_red, PRIO_VS_RED,
+            f"Facturación est. {k.facturacion:,.0f} vs media de la red "
+            f"{k.facturacion_red_media:,.0f} ({k.facturacion_var_red:+.1f}%)."
+            if k.facturacion_var_red is not None else "",
+            "Facturación de la sucursal por debajo de la media de la red; revisar "
+            "mix de productos, venta sugerida (upselling) y prácticas de venta del "
+            "manual."),
     ]
     return [c for c in cands if c is not None]
 
 
 def _yoy(k: PDVKpis) -> list[Desvio]:
-    """Candidatos secundarios: variación interanual (mismo mes del año anterior)."""
+    """Candidatos secundarios: variación interanual de volumen (mismo mes, año anterior)."""
     cands = [
         _mk("kilos_yoy", "Volumen de kilos (interanual)", k.kilos_var_yoy, PRIO_YOY,
             f"Kilos {k.kilos:.0f} vs {k.kilos_yoy:.0f} el mismo mes del año anterior "
             f"({k.kilos_var_yoy:+.1f}%)." if k.kilos_var_yoy is not None else "",
             "Caída del volumen de ventas respecto del mismo mes del año anterior; "
             "revisar conservación, quiebres de stock y cadena de frío."),
-        _mk("visitas_yoy", "Tráfico de visitas (interanual)", k.visitas_var_yoy, PRIO_YOY,
-            f"Visitas {k.visitas} vs {k.visitas_yoy} el mismo mes del año anterior "
-            f"({k.visitas_var_yoy:+.1f}%)." if k.visitas_var_yoy is not None else "",
-            "Caída de tráfico respecto del mismo mes del año anterior; revisar "
-            "atención al cliente y experiencia en el local."),
-        _mk("kilos_visita_yoy", "Kilos por visita (interanual)",
-            k.kilos_por_visita_var_yoy, PRIO_YOY,
-            f"Kilos/visita {k.kilos_por_visita:.2f} vs "
-            f"{k.kilos_por_visita_yoy:.2f} el mismo mes del año anterior "
-            f"({k.kilos_por_visita_var_yoy:+.1f}%)."
-            if k.kilos_por_visita_var_yoy is not None else "",
-            "Caída del tamaño de compra (kilos por visita); revisar surtido, "
-            "porcionado y prácticas de venta del manual."),
     ]
     return [c for c in cands if c is not None]
 
@@ -125,11 +109,11 @@ def _producto(k: PDVKpis) -> Desvio | None:
         perdidos = p.kilos_yoy - p.kilos
         if p.kilos_yoy >= PROD_KILOS_PREV_MIN and perdidos >= PROD_KILOS_PERDIDOS_MIN:
             return _mk(
-                "producto_caida", f"Caída de producto: {p.descripcion}", p.var_yoy,
+                "producto_caida", f"Caída de producto: {p.producto}", p.var_yoy,
                 PRIO_PRODUCTO,
-                f"{p.descripcion}: {p.kilos:.1f} kg vs {p.kilos_yoy:.1f} kg el mismo "
+                f"{p.producto}: {p.kilos:.1f} kg vs {p.kilos_yoy:.1f} kg el mismo "
                 f"mes del año anterior ({p.var_yoy:+.1f}%, -{perdidos:.0f} kg).",
-                f"Caída material de '{p.descripcion}'; revisar conservación, "
+                f"Caída material de '{p.producto}'; revisar conservación, "
                 "reposición y manejo de ese producto según el manual operativo.")
     return None
 
@@ -139,9 +123,13 @@ def _contexto(k: PDVKpis, elegido: Desvio) -> list[str]:
     ctx: list[str] = []
     if k.kilos_var_yoy is not None:
         ctx.append(f"Kilos interanual {k.kilos_var_yoy:+.1f}%.")
+    # Intensidad de promoción vs la red (puede explicar parte de un desvío).
+    if k.pct_promocion or k.pct_promocion_red_media:
+        ctx.append(f"En promoción {k.pct_promocion:.1f}% de kilos "
+                   f"(red {k.pct_promocion_red_media:.1f}%).")
     if k.caidas_productos and elegido.dimension != "producto_caida":
         p = k.caidas_productos[0]
-        ctx.append(f"Mayor caída de producto: {p.descripcion} ({p.var_yoy:+.1f}%).")
+        ctx.append(f"Mayor caída de producto: {p.producto} ({p.var_yoy:+.1f}%).")
     return ctx
 
 
@@ -152,13 +140,13 @@ def detectar_desvio(k: PDVKpis) -> Desvio | None:
     rinde por encima de la red no tiene un problema que auditar y debe abstenerse.
 
     Orden de prioridad:
-      1. Caída **vs la red** (mismo mes) que supere el umbral.
-      2. Si la sucursal no cae vs la red, caída **interanual** relevante (fallback).
+      1. Caída **vs la red** (volumen o facturación, mismo mes) que supere el umbral.
+      2. Si la sucursal no cae vs la red, caída **interanual** de volumen (fallback).
       3. Si tampoco, una **caída de producto** materialmente significativa.
 
     Entre caídas del mismo nivel elige la de mayor magnitud. Devuelve ``None`` (→
     abstención) si la sucursal no presenta ninguna caída relevante. El desvío
-    elegido se enriquece con ``contexto`` (incl. la señal interanual).
+    elegido se enriquece con ``contexto`` (interanual, promoción, producto).
     """
     def elegir(cands: list[Desvio]) -> Desvio | None:
         caidas = [c for c in cands if c.es_relevante and c.direccion == "caida"]
