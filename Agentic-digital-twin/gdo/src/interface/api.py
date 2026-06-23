@@ -23,14 +23,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 HINTS = (
     "Notas de dominio:\n"
-    "- En las tablas de encuestas la columna de email es 'emai' (sin la l final).\n"
-    "- La satisfacción es binaria por tabla: encuestas_buena_experiencia vs "
-    "encuestas_mala_experiencia (no hay puntaje numérico).\n"
-    "- Para atribuir una encuesta a una sucursal, uní por email: "
-    "ventas.email = encuestas_mala_experiencia.emai (y luego ventas.branchofficeid).\n"
-    "- El texto de la queja está en 'origen_respuesta_texto'. Para buscar temas usá "
-    "coincidencia SIN distinción de mayúsculas y por raíz, ej.: "
-    "lower(origen_respuesta_texto) LIKE '%derret%'."
+    "- Usá los nombres EXACTOS de tablas y columnas tal como aparecen en el esquema de "
+    "arriba. No inventes nombres (p.ej. si la tabla de ventas se llama 'datos_ventas', "
+    "no escribas 'ventas').\n"
+    "- El email es la clave para vincular ventas y encuestas: el mismo valor aparece en "
+    "ambas tablas. Con ese join atribuís una encuesta a su sucursal (columna de sucursal "
+    "en la tabla de ventas).\n"
+    "- La satisfacción es binaria por tabla: una tabla de encuestas de buena experiencia y "
+    "otra de mala (no hay puntaje numérico).\n"
+    "- El texto de la queja está en 'origen_respuesta_texto'. Buscá por raíz y SIN "
+    "distinción de mayúsculas, ej.: lower(origen_respuesta_texto) LIKE '%derret%'."
 )
 
 
@@ -47,6 +49,18 @@ class DiagnoseResponse(BaseModel):
     citations: list = []
 
 
+class ConsultaRequest(BaseModel):
+    pregunta: str = Field(..., min_length=5, max_length=500,
+                          description="Consulta sobre el manual operativo.")
+
+
+class ConsultaResponse(BaseModel):
+    pregunta: str
+    respuesta: str
+    citas: list = []
+    abstuvo: bool = False
+
+
 def build_supervisor():
     """Construcción de producción (DuckDB + índices + Ollama)."""
     import duckdb
@@ -59,9 +73,11 @@ def build_supervisor():
     con = duckdb.connect(str(ROOT / "data" / "gdo.duckdb"), read_only=True)
     fast_llm = make_llm(os.getenv("FAST_MODEL"), provider=os.getenv("FAST_PROVIDER", "groq"))
     reason_llm = make_llm(os.getenv("REASON_MODEL"), provider=os.getenv("REASON_PROVIDER", "anthropic"))
+    retriever = HybridRetriever.build_default(ROOT / "data" / "index")
     analyst = TextToSQLAnalyst(con, fast_llm, hints=HINTS)
-    auditor = NormativeAuditor(HybridRetriever.build_default(ROOT / "data" / "index"), fast_llm)
-    return SupervisorAgent(analyst, auditor, llm=fast_llm, reconcile_llm=reason_llm)
+    auditor = NormativeAuditor(retriever, fast_llm)
+    return SupervisorAgent(analyst, auditor, llm=fast_llm, reconcile_llm=reason_llm,
+                           retriever=retriever)
 
 
 def create_app(supervisor=None, notifier=None, api_key: str | None = None) -> FastAPI:
@@ -97,6 +113,17 @@ def create_app(supervisor=None, notifier=None, api_key: str | None = None) -> Fa
             sql=getattr(result, "sql", ""), audits=getattr(result, "audits", []),
             citations=getattr(result, "citations", []),
         )
+
+    @app.post("/consultar", response_model=ConsultaResponse)
+    def consultar(req: ConsultaRequest, x_api_key: str | None = Header(default=None)):
+        """Consulta normativa directa sobre el manual (RAG-QA, sin SQL)."""
+        if state["key"] and x_api_key != state["key"]:
+            raise HTTPException(status_code=401, detail="API key inválida o faltante")
+        from ..rag.qa import consultar_norma
+        sup = get_supervisor()
+        r = consultar_norma(sup.retriever, sup.llm, req.pregunta)
+        return ConsultaResponse(pregunta=req.pregunta, respuesta=r["respuesta"],
+                                citas=r["citas"], abstuvo=r["abstuvo"])
 
     return app
 

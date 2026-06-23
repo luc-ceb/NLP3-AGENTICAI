@@ -36,14 +36,17 @@ INDEX = ROOT / "data" / "index"
 # Notas de dominio para el Analista (corrige el typo 'emai' y el join a sucursal)
 HINTS = (
     "Notas de dominio:\n"
-    "- En las tablas de encuestas la columna de email es 'emai' (sin la l final).\n"
-    "- La satisfacción es binaria por tabla: encuestas_buena_experiencia vs "
-    "encuestas_mala_experiencia (no hay puntaje numérico).\n"
-    "- Para atribuir una encuesta a una sucursal, uní por email: "
-    "ventas.email = encuestas_mala_experiencia.emai (y luego ventas.branchofficeid).\n"
-    "- El texto de la queja está en 'origen_respuesta_texto'. Para buscar temas usá "
-    "coincidencia SIN distinción de mayúsculas y por raíz, ej.: "
-    "lower(origen_respuesta_texto) LIKE '%derret%' (capta derretido/derretida/derritió)."
+    "- Usá los nombres EXACTOS de tablas y columnas tal como aparecen en el esquema de "
+    "arriba. No inventes nombres (p.ej. si la tabla de ventas se llama 'datos_ventas', "
+    "no escribas 'ventas').\n"
+    "- El email es la clave para vincular ventas y encuestas: el mismo valor aparece en "
+    "ambas tablas. Con ese join atribuís una encuesta a su sucursal (columna de sucursal "
+    "en la tabla de ventas).\n"
+    "- La satisfacción es binaria por tabla: una tabla de encuestas de buena experiencia y "
+    "otra de mala (no hay puntaje numérico).\n"
+    "- El texto de la queja está en 'origen_respuesta_texto'. Buscá por raíz y SIN "
+    "distinción de mayúsculas, ej.: lower(origen_respuesta_texto) LIKE '%derret%' "
+    "(capta derretido/derretida/derritió)."
 )
 
 # Pregunta estrella: dato (quejas de cadena de frío) -> norma (manual de cámara de frío)

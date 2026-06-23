@@ -9,8 +9,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import urllib.request
+
+log = logging.getLogger(__name__)
 
 
 class BaseLLM:
@@ -103,6 +106,55 @@ class StaticSQLClient(BaseLLM):
         return "SELECT 'sin regla para esta pregunta en el stub' AS nota"
 
 
+def _is_rate_limit(e: Exception) -> bool:
+    """Heurística robusta para detectar un error de límite de tasa (429)."""
+    if getattr(e, "status_code", None) == 429:
+        return True
+    if "ratelimit" in type(e).__name__.lower():
+        return True
+    msg = str(e).lower()
+    return "rate limit" in msg or "rate_limit" in msg or "429" in msg
+
+
+class FallbackLLM(BaseLLM):
+    """LLM con conmutación a un proveedor de respaldo ante rate-limit.
+
+    Usa ``primary`` hasta que una llamada falla por límite de tasa (429): ahí
+    registra el evento, queda 'enganchado' al respaldo por el resto de la sesión
+    (el cupo diario no se recupera en el corto plazo) y reintenta. Ante otros
+    errores del primario intenta el respaldo una vez, sin engancharse.
+
+    El respaldo se construye perezosamente (no requiere su API key salvo que se
+    use). Devuelve siempre el texto de quien haya respondido.
+    """
+
+    def __init__(self, primary: BaseLLM, make_fallback):
+        self.primary = primary
+        self._make_fallback = make_fallback   # callable -> BaseLLM
+        self._fallback: BaseLLM | None = None
+        self._latched = False                 # True tras un rate-limit del primario
+
+    @property
+    def fallback(self) -> BaseLLM:
+        if self._fallback is None:
+            self._fallback = self._make_fallback()
+        return self._fallback
+
+    def complete(self, prompt: str) -> str:
+        if self._latched:
+            return self.fallback.complete(prompt)
+        try:
+            return self.primary.complete(prompt)
+        except Exception as e:  # noqa: BLE001
+            if _is_rate_limit(e):
+                log.warning("LLM primario sin cupo (rate limit); conmuto a respaldo "
+                            "por el resto de la sesión. Detalle: %s", e)
+                self._latched = True
+            else:
+                log.warning("LLM primario falló (%s); reintento en el respaldo.", e)
+            return self.fallback.complete(prompt)
+
+
 def make_llm(model: str | None = None, provider: str | None = None, **kw) -> BaseLLM:
     provider = (provider or os.getenv("LLM_PROVIDER", "groq")).lower()
     if provider == "anthropic":
@@ -112,3 +164,20 @@ def make_llm(model: str | None = None, provider: str | None = None, **kw) -> Bas
     if provider == "ollama":
         return OllamaClient(model=model, **kw)
     raise ValueError(f"proveedor desconocido: {provider!r} (usá 'anthropic', 'groq' u 'ollama')")
+
+
+def make_llm_with_fallback(provider: str | None = None, fallback: str | None = None,
+                           model: str | None = None, fallback_model: str | None = None,
+                           **kw) -> BaseLLM:
+    """LLM primario con respaldo automático ante rate-limit.
+
+    Por defecto Groq (inferencia rápida) con respaldo Anthropic. Configurable vía
+    env: ``LLM_PROVIDER``, ``LLM_FALLBACK_PROVIDER`` (y ``*_MODEL``). Si ambos
+    proveedores coinciden, devuelve un cliente simple (sin respaldo).
+    """
+    provider = (provider or os.getenv("LLM_PROVIDER", "groq")).lower()
+    fallback = (fallback or os.getenv("LLM_FALLBACK_PROVIDER", "anthropic")).lower()
+    primary = make_llm(model, provider=provider, **kw)
+    if fallback == provider:
+        return primary
+    return FallbackLLM(primary, lambda: make_llm(fallback_model, provider=fallback, **kw))

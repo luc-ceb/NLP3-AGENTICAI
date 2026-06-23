@@ -40,41 +40,66 @@ with st.sidebar:
     st.divider()
     st.caption("Flujo: Analista (SQL) → Auditor (RAG + CRAG) → Supervisor (reconcilia).")
 
-st.title("🍦 Diagnóstico operativo")
-st.caption("Realidad (datos) vs norma (manual) — con trazabilidad de fuentes.")
+st.title("🍦 Gemelo Digital Operativo")
 
-ejemplo = st.selectbox("Ejemplos (opcional)", [""] + EJEMPLOS)
-pregunta = st.text_area("Pregunta operativa", value=ejemplo, height=80,
-                        placeholder="Escribí una pregunta sobre la operación…")
+tab_diag, tab_manual = st.tabs(["Diagnóstico operativo", "Consultar el manual"])
 
-if st.button("Diagnosticar", type="primary", disabled=not pregunta.strip()):
-    supervisor, notifier = get_engine()
-    with st.spinner("Analizando datos y contrastando con la norma…"):
-        res = supervisor.diagnose(pregunta.strip())
-        notifier.send(res)  # acción automática
+with tab_diag:
+    st.caption("Realidad (datos) vs norma (manual) — con trazabilidad de fuentes.")
+    ejemplo = st.selectbox("Ejemplos (opcional)", [""] + EJEMPLOS)
+    pregunta = st.text_area("Pregunta operativa", value=ejemplo, height=80,
+                            placeholder="Escribí una pregunta sobre la operación…")
 
-    st.subheader("Diagnóstico")
-    st.markdown(res.diagnosis)
+    if st.button("Diagnosticar", type="primary", disabled=not pregunta.strip()):
+        supervisor, notifier = get_engine()
+        with st.spinner("Analizando datos y contrastando con la norma…"):
+            res = supervisor.diagnose(pregunta.strip())
+            notifier.send(res)  # acción automática
 
-    if res.audits:
-        st.subheader("Hallazgos")
-        for a in res.audits:
-            v = a.get("verdict", "")
-            linea = f"**{a.get('claim','')}** — {a.get('justification','')}"
-            if v == "no_cumple":
-                st.error(f"❌ NO CUMPLE · {linea}")
-            elif v == "cumple":
-                st.success(f"✅ CUMPLE · {linea}")
-            else:
-                st.info(f"➖ SIN NORMA · {linea}")
+        st.subheader("Diagnóstico")
+        st.markdown(res.diagnosis)
 
-    if res.citations:
-        st.subheader("Fuentes citadas")
-        for c in res.citations:
-            st.markdown(f"- `{c}`")
+        if res.audits:
+            st.subheader("Hallazgos")
+            for a in res.audits:
+                v = a.get("verdict", "")
+                linea = f"**{a.get('claim','')}** — {a.get('justification','')}"
+                if v == "no_cumple":
+                    st.error(f"❌ NO CUMPLE · {linea}")
+                elif v == "cumple":
+                    st.success(f"✅ CUMPLE · {linea}")
+                else:
+                    st.info(f"➖ SIN NORMA · {linea}")
 
-    with st.expander("Detalle técnico (SQL y datos)"):
-        st.code(res.sql or "—", language="sql")
-        st.text(res.facts or "—")
+        if res.citations:
+            st.subheader("Fuentes citadas")
+            for c in res.citations:
+                st.markdown(f"- `{c}`")
 
-    st.caption("✓ Diagnóstico registrado automáticamente en el log.")
+        with st.expander("Detalle técnico (SQL y datos)"):
+            st.code(res.sql or "—", language="sql")
+            st.text(res.facts or "—")
+
+        st.caption("✓ Diagnóstico registrado automáticamente en el log.")
+
+with tab_manual:
+    st.caption("Consulta directa al manual operativo (RAG, sin SQL). Responde solo "
+               "con lo que figura en el manual y cita la fuente; si no figura, lo aclara.")
+    preg_manual = st.text_area(
+        "¿Qué querés consultar del manual?", height=80,
+        placeholder="Ej.: ¿cuál es el procedimiento de recepción de mercadería congelada?")
+
+    if st.button("Consultar manual", disabled=not preg_manual.strip()):
+        from src.rag.qa import consultar_norma
+        supervisor, _ = get_engine()
+        with st.spinner("Buscando en el manual…"):
+            r = consultar_norma(supervisor.retriever, supervisor.llm, preg_manual.strip())
+
+        st.subheader("Respuesta")
+        st.markdown(r["respuesta"])
+        if r["abstuvo"]:
+            st.info("El manual no parece cubrir esta consulta.")
+        if r["citas"]:
+            st.subheader("Fuentes citadas")
+            for c in r["citas"]:
+                st.markdown(f"- `{c}`")

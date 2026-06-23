@@ -1,4 +1,27 @@
-duckdb>=1.0
+# --- Datos / ETL ---
+duckdb>=1.5
 pandas>=2.0
-openpyxl>=3.1
+openpyxl>=3.1          # motor de lectura .xlsx para pandas
 numpy>=1.26
+
+# --- LLM ---
+groq>=1.4              # proveedor primario
+anthropic>=0.107       # respaldo automático ante rate-limit
+
+# --- Agentes / grafos ---
+langgraph>=1.2
+
+# --- RAG (recuperación híbrida: BM25 + denso) ---
+rank-bm25>=0.2
+faiss-cpu>=1.10        # índice denso local (VECTOR_BACKEND=faiss, default)
+sentence-transformers>=5.0   # embeddings (trae torch/transformers transitivamente)
+
+# --- Interfaces ---
+fastapi>=0.136
+uvicorn>=0.48
+streamlit>=1.58
+pydantic>=2.0
+
+# --- Opcionales (no requeridos por el camino default) ---
+# pinecone>=9.0        # backend denso alternativo (VECTOR_BACKEND=pinecone)
+# pymupdf>=1.27        # ingesta de manuales en PDF (fitz); el manual default es Markdown
