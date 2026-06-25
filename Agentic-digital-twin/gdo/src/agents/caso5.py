@@ -70,8 +70,8 @@ def _estado(r: Caso2Result) -> str:
 
 
 # Alcance del desvío por nivel de prioridad: explica por qué un desvío de tienda
-# vs la red rankea sobre una caída de producto de % mayor pero impacto local.
-_ALCANCE = {0: "Sucursal vs red", 1: "Interanual", 2: "Producto"}
+# vs la red rankea sobre una caída de familia de % mayor pero impacto local.
+_ALCANCE = {0: "Sucursal vs red", 1: "Interanual", 2: "Familia"}
 
 
 def _alcance(r: Caso2Result) -> str:

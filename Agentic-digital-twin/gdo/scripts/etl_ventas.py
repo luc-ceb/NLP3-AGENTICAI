@@ -39,6 +39,7 @@ SELECT
     "region"                                                       AS region,
     CAST("numero" AS VARCHAR)                                      AS numero,
     "ProductName"                                                  AS producto,
+    "linea_comercial"                                              AS linea_comercial,
     CAST("Kilos vendidos totales" AS DOUBLE)                      AS kilos,
     CAST("precio" AS DOUBLE)                                       AS precio,
     CAST("Kilos vendidos totales" AS DOUBLE) * CAST("precio" AS DOUBLE) AS facturacion,
@@ -63,12 +64,12 @@ def main() -> int:
     con = duckdb.connect(str(DB))
     try:
         con.execute(DDL.format(path=PARQUET.as_posix()))
-        n, nb, npr = con.execute(
-            "SELECT COUNT(*), COUNT(DISTINCT branchofficeid), COUNT(DISTINCT producto) "
-            "FROM datos_ventas").fetchone()
+        n, nb, npr, nfam = con.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT branchofficeid), COUNT(DISTINCT producto), "
+            "COUNT(DISTINCT linea_comercial) FROM datos_ventas").fetchone()
         fmin, fmax = con.execute("SELECT MIN(fecha), MAX(fecha) FROM datos_ventas").fetchone()
-        log.info("datos_ventas: %d filas · %d sucursales · %d productos · %s..%s",
-                 n, nb, npr, fmin, fmax)
+        log.info("datos_ventas: %d filas · %d sucursales · %d productos · %d familias · %s..%s",
+                 n, nb, npr, nfam, fmin, fmax)
     finally:
         con.close()
     return 0

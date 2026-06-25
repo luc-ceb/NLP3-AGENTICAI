@@ -130,8 +130,8 @@ def periodo_por_defecto(con: duckdb.DuckDBPyConnection) -> Periodo:
 
 
 @dataclass
-class ProductoKpi:
-    producto: str              # nombre del producto (la fuente no trae id)
+class FamiliaKpi:
+    familia: str               # línea comercial (POTES, IMPULSO, GRANEL, ...)
     kilos: float
     kilos_yoy: float = 0.0
     var_yoy: float | None = None  # variación % de kilos vs el mismo período del año anterior
@@ -164,17 +164,17 @@ class PDVKpis:
     facturacion_var_red: float | None = None
     pct_promocion_red_media: float = 0.0
 
-    # Mix de producto
-    top_productos: list[ProductoKpi] = field(default_factory=list)
-    caidas_productos: list[ProductoKpi] = field(default_factory=list)
+    # Mix por familia (línea comercial)
+    top_familias: list[FamiliaKpi] = field(default_factory=list)
+    caidas_familias: list[FamiliaKpi] = field(default_factory=list)
 
     def resumen(self) -> str:
         """Texto compacto de los KPIs (para prompts / logs)."""
         def f(v: float | None, suf: str = "%") -> str:
             return "s/d" if v is None else f"{v:+.1f}{suf}"
-        top = ", ".join(p.producto for p in self.top_productos[:3]) or "—"
+        top = ", ".join(p.familia for p in self.top_familias[:3]) or "—"
         caida = "; ".join(
-            f"{p.producto} ({f(p.var_yoy)})" for p in self.caidas_productos[:3]) or "—"
+            f"{p.familia} ({f(p.var_yoy)})" for p in self.caidas_familias[:3]) or "—"
         return (
             f"PDV {self.pdv[:8]} · {self.periodo}\n"
             f"- Kilos: {self.kilos:.1f} (interanual {f(self.kilos_var_yoy)}, "
@@ -183,8 +183,8 @@ class PDVKpis:
             f"(vs red {f(self.facturacion_var_red)})\n"
             f"- En promoción: {self.pct_promocion:.1f}% de kilos "
             f"(red {self.pct_promocion_red_media:.1f}%)\n"
-            f"- Top productos: {top}\n"
-            f"- Caídas relevantes (interanual): {caida}"
+            f"- Top familias: {top}\n"
+            f"- Caídas relevantes de familia (interanual): {caida}"
         )
 
 
@@ -201,13 +201,13 @@ WHERE fecha BETWEEN ? AND ?
 GROUP BY branchofficeid
 """
 
-# Kilos por producto de una sucursal en una ventana de fechas.
-_PROD_SQL = f"""
-SELECT producto,
+# Kilos por familia (línea comercial) de una sucursal en una ventana de fechas.
+_FAM_SQL = f"""
+SELECT linea_comercial AS familia,
        COALESCE(SUM(kilos), 0) AS kilos
 FROM {TABLE}
 WHERE branchofficeid = ? AND fecha BETWEEN ? AND ?
-GROUP BY producto
+GROUP BY linea_comercial
 """
 
 
@@ -216,9 +216,9 @@ def _agg_by_pdv(con: duckdb.DuckDBPyConnection, p: Periodo) -> dict[str, dict]:
     return {row["pdv"]: row.to_dict() for _, row in df.iterrows()}
 
 
-def _productos(con: duckdb.DuckDBPyConnection, pdv: str, p: Periodo) -> dict[str, float]:
-    df = con.execute(_PROD_SQL, [pdv, p.desde, p.hasta]).fetchdf()
-    return {str(row["producto"]): float(row["kilos"]) for _, row in df.iterrows()}
+def _familias(con: duckdb.DuckDBPyConnection, pdv: str, p: Periodo) -> dict[str, float]:
+    df = con.execute(_FAM_SQL, [pdv, p.desde, p.hasta]).fetchdf()
+    return {str(row["familia"]): float(row["kilos"]) for _, row in df.iterrows()}
 
 
 def compute_kpis(con: duckdb.DuckDBPyConnection, pdv: str, periodo: Periodo | str,
@@ -229,8 +229,8 @@ def compute_kpis(con: duckdb.DuckDBPyConnection, pdv: str, periodo: Periodo | st
         con: conexión DuckDB (solo lectura).
         pdv: branchofficeid objetivo.
         periodo: :class:`Periodo` (ventana de fechas) o un 'YYYY-MM' (atajo de mes).
-        top_n: cantidad de productos top por kilos a reportar.
-        drop_n: cantidad de mayores caídas de producto (interanual) a reportar.
+        top_n: cantidad de familias (líneas comerciales) top por kilos a reportar.
+        drop_n: cantidad de mayores caídas de familia (interanual) a reportar.
 
     La comparativa interanual se SUPRIME (queda en None) si la fuente no cubre por
     completo la ventana del año anterior; en ese caso el desvío cae al vs-red.
@@ -274,21 +274,21 @@ def compute_kpis(con: duckdb.DuckDBPyConnection, pdv: str, periodo: Periodo | st
         pct_promocion_red_media=round(red_promo, 1),
     )
 
-    # Mix de producto: top por kilos y mayores caídas interanuales.
-    prod_cur = _productos(con, pdv, periodo)
-    prod_yoy = _productos(con, pdv, yoy) if yoy_cubierto else {}
-    productos: list[ProductoKpi] = []
-    for nombre, kg in prod_cur.items():
-        kp = float(prod_yoy.get(nombre, 0) or 0)
-        productos.append(ProductoKpi(
-            producto=nombre, kilos=round(kg, 1),
+    # Mix por familia (línea comercial): top por kilos y mayores caídas interanuales.
+    fam_cur = _familias(con, pdv, periodo)
+    fam_yoy = _familias(con, pdv, yoy) if yoy_cubierto else {}
+    familias: list[FamiliaKpi] = []
+    for nombre, kg in fam_cur.items():
+        kp = float(fam_yoy.get(nombre, 0) or 0)
+        familias.append(FamiliaKpi(
+            familia=nombre, kilos=round(kg, 1),
             kilos_yoy=round(kp, 1),
             var_yoy=_pct(kg, kp) if yoy_cubierto else None))
 
-    k.top_productos = sorted(productos, key=lambda x: x.kilos, reverse=True)[:top_n]
-    # Caídas: solo productos con volumen interanual significativo y baja real (si no
-    # hay YoY comparable, var_yoy es None y no se reportan caídas de producto).
-    caidas = [x for x in productos if x.var_yoy is not None and x.var_yoy < 0
+    k.top_familias = sorted(familias, key=lambda x: x.kilos, reverse=True)[:top_n]
+    # Caídas: solo familias con volumen interanual significativo y baja real (si no
+    # hay YoY comparable, var_yoy es None y no se reportan caídas de familia).
+    caidas = [x for x in familias if x.var_yoy is not None and x.var_yoy < 0
               and x.kilos_yoy >= 5.0]
-    k.caidas_productos = sorted(caidas, key=lambda x: x.var_yoy)[:drop_n]
+    k.caidas_familias = sorted(caidas, key=lambda x: x.var_yoy)[:drop_n]
     return k

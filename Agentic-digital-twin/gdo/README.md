@@ -30,7 +30,7 @@ la norma y redactar el diagnóstico, siempre con citas reales.
     *Señal primaria.*
   - **interanual (YoY)** — contra el **mismo período del año anterior**. Detecta
     el deterioro propio aunque la red entera haya caído. *Fallback / contexto.*
-- **Prioridad de desvíos:** `vs red (0) < interanual (1) < producto (2)`; dentro
+- **Prioridad de desvíos:** `vs red (0) < interanual (1) < familia (2)`; dentro
   de cada nivel, mayor magnitud primero. Este orden rige tanto la selección por
   sucursal (Caso 2) como el ranking entre sucursales (Caso 5).
 - **Eficiencia.** Los nodos de KPIs y detección son SQL + reglas, sin LLM. Si no
@@ -163,8 +163,8 @@ Métricas IR formales (Hit@k, MRR, nDCG) quedan en `src/eval/metrics.py`.
 
 - **KPIs por SQL fijo, no Text-to-SQL** — más robusto para la demo.
 - **Un solo modelo LLM** (sin split FAST/REASON).
-- **vs red** como señal primaria; **interanual** y caídas de producto como
-  contexto/fallback.
+- **vs red** como señal primaria; **interanual** y caídas por familia (línea
+  comercial) como contexto/fallback.
 
 ## Fuera de alcance (fases siguientes)
 

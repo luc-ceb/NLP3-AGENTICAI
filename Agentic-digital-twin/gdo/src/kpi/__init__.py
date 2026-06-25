@@ -8,12 +8,12 @@ clientes/tickets/unidades, así que los KPIs son de **volumen** (kilos) y
 (volumen real, sin inflación); la facturación se compara solo vs la red.
 """
 from .metrics import (
-    PDVKpis, Periodo, ProductoKpi, compute_kpis, latest_month, list_pdvs,
+    FamiliaKpi, PDVKpis, Periodo, compute_kpis, latest_month, list_pdvs,
     periodo_por_defecto,
 )
 from .deviations import Desvio, detectar_desvio
 
 __all__ = [
-    "PDVKpis", "Periodo", "ProductoKpi", "compute_kpis", "latest_month",
+    "FamiliaKpi", "PDVKpis", "Periodo", "compute_kpis", "latest_month",
     "list_pdvs", "periodo_por_defecto", "Desvio", "detectar_desvio",
 ]
