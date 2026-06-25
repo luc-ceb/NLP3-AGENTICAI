@@ -25,11 +25,11 @@ la norma y redactar el diagnóstico, siempre con citas reales.
   `distinct(customerid, fecha)`) y clientes únicos por `(sucursal, mes)`. No hay
   columnas de precio/ingreso, así que las métricas son de volumen y tráfico.
 - **Dos comparaciones, ambas libres de estacionalidad:**
-  - **vs red** — la sucursal contra la media de la red en el **mismo mes**. Aísla
-    el desempeño propio del efecto estacional que mueve a toda la red. *Señal
-    primaria.*
-  - **interanual (YoY)** — contra el **mismo mes del año anterior**. Detecta el
-    deterioro propio aunque la red entera haya caído. *Fallback / contexto.*
+  - **vs red** — la sucursal contra la media de la red en el **mismo período**.
+    Aísla el desempeño propio del efecto estacional que mueve a toda la red.
+    *Señal primaria.*
+  - **interanual (YoY)** — contra el **mismo período del año anterior**. Detecta
+    el deterioro propio aunque la red entera haya caído. *Fallback / contexto.*
 - **Prioridad de desvíos:** `vs red (0) < interanual (1) < producto (2)`; dentro
   de cada nivel, mayor magnitud primero. Este orden rige tanto la selección por
   sucursal (Caso 2) como el ranking entre sucursales (Caso 5).
@@ -65,16 +65,23 @@ diario de 100k tokens; al agotarse, la sesión conmuta al respaldo).
 ## Uso (CLI)
 
 Entrada principal. Vía módulo o el wrapper `scripts/gdo.py`. El PDV admite el
-GUID completo o un **prefijo único** (p. ej. `A9D75316`); el mes por defecto es el
-último mes completo.
+GUID completo o un **prefijo único** (p. ej. `0008C682`).
+
+El **período de análisis** es un mes (`--mes YYYY-MM`) o una **ventana de fechas
+arbitraria** (`--desde YYYY-MM-DD --hasta YYYY-MM-DD`, ambos inclusive); en los dos
+casos se compara contra el **mismo período del año anterior**. Por defecto, el
+último mes completo. *Si la fuente no cubre por completo la ventana del año
+anterior, el interanual se suprime y el desvío cae al comparativo vs red.*
 
 ```bash
 # Caso 2 — diagnóstico de una sucursal
-python -m src.interface.cli diagnosticar A9D75316 --mes 2026-04
-python -m src.interface.cli diagnosticar A9D75316 --json
+python -m src.interface.cli diagnosticar 0008C682 --mes 2026-04
+python -m src.interface.cli diagnosticar 0008C682 --desde 2026-01-01 --hasta 2026-05-31
+python -m src.interface.cli diagnosticar 0008C682 --json
 
-# Caso 5 — plan mensual rankeado (Markdown)
+# Caso 5 — plan de diagnóstico rankeado (Markdown), por mes o por ventana
 python -m src.interface.cli plan-mensual --out plan_2026-04.md
+python -m src.interface.cli plan-mensual --desde 2026-01-01 --hasta 2026-05-31
 python -m src.interface.cli plan-mensual --json
 
 # Chequeos livianos de comportamiento

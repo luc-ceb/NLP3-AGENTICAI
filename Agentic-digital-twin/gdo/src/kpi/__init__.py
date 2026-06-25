@@ -7,10 +7,13 @@ clientes/tickets/unidades, así que los KPIs son de **volumen** (kilos) y
 % en promoción acompaña como contexto. Eje temporal: interanual sobre kilos
 (volumen real, sin inflación); la facturación se compara solo vs la red.
 """
-from .metrics import PDVKpis, ProductoKpi, compute_kpis, latest_month, list_pdvs
+from .metrics import (
+    PDVKpis, Periodo, ProductoKpi, compute_kpis, latest_month, list_pdvs,
+    periodo_por_defecto,
+)
 from .deviations import Desvio, detectar_desvio
 
 __all__ = [
-    "PDVKpis", "ProductoKpi", "compute_kpis", "latest_month", "list_pdvs",
-    "Desvio", "detectar_desvio",
+    "PDVKpis", "Periodo", "ProductoKpi", "compute_kpis", "latest_month",
+    "list_pdvs", "periodo_por_defecto", "Desvio", "detectar_desvio",
 ]

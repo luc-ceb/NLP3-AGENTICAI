@@ -95,9 +95,9 @@ def _yoy(k: PDVKpis) -> list[Desvio]:
     """Candidatos secundarios: variación interanual de volumen (mismo mes, año anterior)."""
     cands = [
         _mk("kilos_yoy", "Volumen de kilos (interanual)", k.kilos_var_yoy, PRIO_YOY,
-            f"Kilos {k.kilos:.0f} vs {k.kilos_yoy:.0f} el mismo mes del año anterior "
+            f"Kilos {k.kilos:.0f} vs {k.kilos_yoy:.0f} el mismo período del año anterior "
             f"({k.kilos_var_yoy:+.1f}%)." if k.kilos_var_yoy is not None else "",
-            "Caída del volumen de ventas respecto del mismo mes del año anterior; "
+            "Caída del volumen de ventas respecto del mismo período del año anterior; "
             "revisar conservación, quiebres de stock y cadena de frío."),
     ]
     return [c for c in cands if c is not None]
@@ -112,7 +112,7 @@ def _producto(k: PDVKpis) -> Desvio | None:
                 "producto_caida", f"Caída de producto: {p.producto}", p.var_yoy,
                 PRIO_PRODUCTO,
                 f"{p.producto}: {p.kilos:.1f} kg vs {p.kilos_yoy:.1f} kg el mismo "
-                f"mes del año anterior ({p.var_yoy:+.1f}%, -{perdidos:.0f} kg).",
+                f"período del año anterior ({p.var_yoy:+.1f}%, -{perdidos:.0f} kg).",
                 f"Caída material de '{p.producto}'; revisar conservación, "
                 "reposición y manejo de ese producto según el manual operativo.")
     return None

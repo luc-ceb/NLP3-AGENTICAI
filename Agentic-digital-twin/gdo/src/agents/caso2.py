@@ -25,7 +25,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TypedDict
 
-from ..kpi import Desvio, PDVKpis, compute_kpis, detectar_desvio, latest_month
+from ..kpi import (
+    Desvio, PDVKpis, Periodo, compute_kpis, detectar_desvio, periodo_por_defecto,
+)
 from .auditor_rag import AuditResult, _parse_json
 
 DIAGNOSE_PROMPT = """Sos el supervisor de diagnóstico operativo de una cadena de heladerías.
@@ -53,7 +55,7 @@ CONTEXTO NORMATIVO (pasajes del manual con su cita entre corchetes):
 
 class Caso2State(TypedDict, total=False):
     pdv: str
-    mes: str
+    periodo: Periodo
     kpis: PDVKpis
     desvio: Desvio | None
     audit: AuditResult
@@ -68,7 +70,7 @@ class Caso2State(TypedDict, total=False):
 class Caso2Result:
     """Salida del Caso 2: {pdv, periodo, desvío, diagnóstico, acción, cita | abstención}."""
     pdv: str
-    mes: str
+    periodo: str               # etiqueta del período analizado ('YYYY-MM' o rango)
     kpis: PDVKpis | None = None
     desvio: Desvio | None = None
     diagnostico: str = ""
@@ -89,7 +91,7 @@ class Caso2Result:
         return self.desvio.orden if self.desvio else (99, 0.0)
 
     def __str__(self) -> str:
-        cab = f"PDV {self.pdv[:8]} · {self.mes}"
+        cab = f"PDV {self.pdv[:8]} · {self.periodo}"
         if self.abstuvo:
             return f"{cab}\nABSTENCIÓN: {self.motivo}"
         cites = "\n".join(f"  · {c}" for c in self.citas) or "  —"
@@ -141,7 +143,7 @@ class DiagnosticadorPDV:
 
     # --- nodos (kpis y detectar: sin LLM) ---
     def _kpis(self, state: Caso2State) -> dict:
-        k = compute_kpis(self.con, state["pdv"], state["mes"])
+        k = compute_kpis(self.con, state["pdv"], state["periodo"])
         return {"kpis": k}
 
     def _detectar(self, state: Caso2State) -> dict:
@@ -184,14 +186,17 @@ class DiagnosticadorPDV:
                 "accion": out.get("accion", "")}
 
     # --- API pública ---
-    def diagnosticar(self, pdv: str, mes: str | None = None) -> Caso2Result:
-        """Ejecuta el Caso 2 para una sucursal y un mes ('YYYY-MM').
+    def diagnosticar(self, pdv: str,
+                     periodo: Periodo | str | None = None) -> Caso2Result:
+        """Ejecuta el Caso 2 para una sucursal y un período.
 
-        Si ``mes`` es None usa el último mes COMPLETO disponible (evita comparar
-        contra un mes en curso).
+        ``periodo`` admite un :class:`Periodo` (ventana de fechas), un 'YYYY-MM'
+        (atajo de mes) o None. Si es None usa el último mes COMPLETO disponible
+        (evita comparar contra un mes en curso).
         """
-        mes = mes or latest_month(self.con, complete_only=True)
-        s = self.app.invoke({"pdv": pdv, "mes": mes})
+        periodo = (Periodo.coerce(periodo) if periodo is not None
+                   else periodo_por_defecto(self.con))
+        s = self.app.invoke({"pdv": pdv, "periodo": periodo})
 
         desvio = s.get("desvio")
         audit = s.get("audit")
@@ -210,7 +215,7 @@ class DiagnosticadorPDV:
             motivo = ""
 
         return Caso2Result(
-            pdv=pdv, mes=mes, kpis=s.get("kpis"), desvio=desvio,
+            pdv=pdv, periodo=periodo.etiqueta, kpis=s.get("kpis"), desvio=desvio,
             diagnostico=s.get("diagnostico", ""), accion=s.get("accion", ""),
             citas=s.get("citas", []), abstuvo=s.get("abstuvo", True),
             motivo=motivo, verdict=(audit.verdict if audit else ""))

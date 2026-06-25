@@ -1,9 +1,13 @@
 """CLI del Gemelo Digital Operativo (GDO).
 
 Comandos:
-    diagnosticar <PDV> [--mes YYYY-MM] [--json]   Caso 2: diagnóstico de un PDV
-    plan-mensual [--mes YYYY-MM] [--out f] [--json]  Caso 5: plan mensual rankeado
+    diagnosticar <PDV> [--mes YYYY-MM | --desde D --hasta H] [--json]
+    plan-mensual [--mes YYYY-MM | --desde D --hasta H] [--out f] [--json]
     eval [--mes YYYY-MM] [--with-llm]             chequeos livianos de comportamiento
+
+El período de análisis es un mes (--mes YYYY-MM) o una ventana de fechas arbitraria
+(--desde/--hasta en YYYY-MM-DD); en ambos casos se compara contra el mismo período
+del año anterior. Por defecto, el último mes completo disponible.
 
 El PDV admite el GUID completo o un prefijo único (p.ej. los primeros 8 chars).
 LLM: Groq por defecto con respaldo automático a Anthropic ante rate-limit.
@@ -12,6 +16,7 @@ Recuperación densa: FAISS local (VECTOR_BACKEND=faiss por defecto en la CLI).
 Uso:
     python -m src.interface.cli plan-mensual
     python -m src.interface.cli diagnosticar A9D75316 --mes 2026-04
+    python -m src.interface.cli diagnosticar A9D75316 --desde 2026-01-01 --hasta 2026-05-31
 """
 from __future__ import annotations
 
@@ -19,6 +24,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +56,33 @@ def _resolve_pdv(con, pdv: str) -> str:
     raise SystemExit(f"Prefijo '{pdv}' es ambiguo: coincide con {amb}. Usá más caracteres.")
 
 
+def _periodo_from_args(args):
+    """Construye el Periodo desde --mes o --desde/--hasta (o None → por defecto)."""
+    from ..kpi import Periodo
+    desde = getattr(args, "desde", None)
+    hasta = getattr(args, "hasta", None)
+    mes = getattr(args, "mes", None)
+    if desde or hasta:
+        if not (desde and hasta):
+            raise SystemExit("Indicá --desde y --hasta juntos (YYYY-MM-DD).")
+        if mes:
+            raise SystemExit("Usá --mes O --desde/--hasta, no ambos.")
+        try:
+            d0, d1 = date.fromisoformat(desde), date.fromisoformat(hasta)
+        except ValueError as e:
+            raise SystemExit(f"Fecha inválida (usá YYYY-MM-DD): {e}")
+        try:
+            return Periodo.de_rango(d0, d1)
+        except ValueError as e:
+            raise SystemExit(str(e))
+    if mes:
+        try:
+            return Periodo.de_mes(mes)
+        except (ValueError, IndexError):
+            raise SystemExit(f"Mes inválido '{mes}' (usá YYYY-MM).")
+    return None
+
+
 def _build_llm():
     """LLM primario (Groq) con respaldo automático (Anthropic) ante rate-limit."""
     from ..llm.clients import make_llm_with_fallback
@@ -76,11 +109,11 @@ def cmd_diagnosticar(args) -> int:
     pdv = _resolve_pdv(con, args.pdv)
     llm = _build_llm()
     diag = DiagnosticadorPDV(con, _build_auditor(_build_retriever(), llm), llm)
-    r = diag.diagnosticar(pdv, args.mes)
+    r = diag.diagnosticar(pdv, _periodo_from_args(args))
 
     if args.json:
         print(json.dumps({
-            "pdv": r.pdv, "mes": r.mes, "abstuvo": r.abstuvo, "motivo": r.motivo,
+            "pdv": r.pdv, "periodo": r.periodo, "abstuvo": r.abstuvo, "motivo": r.motivo,
             "desvio": (r.desvio.detalle if r.desvio else None),
             "severidad": r.severidad, "verdict": r.verdict,
             "diagnostico": r.diagnostico, "accion": r.accion, "citas": r.citas,
@@ -95,10 +128,10 @@ def cmd_plan_mensual(args) -> int:
     con = _connect()
     llm = _build_llm()
     plan = PlanificadorMensual(con, _build_auditor(_build_retriever(), llm), llm)
-    res = plan.generar(args.mes)
+    res = plan.generar(_periodo_from_args(args))
 
     if args.json:
-        out = {"mes": res.mes, "ranking": [
+        out = {"periodo": res.periodo, "ranking": [
             {"pdv": r.pdv, "desvio": (r.desvio.detalle if r.desvio else None),
              "severidad": r.severidad, "abstuvo": r.abstuvo,
              "diagnostico": r.diagnostico, "accion": r.accion, "citas": r.citas}
@@ -136,11 +169,15 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("diagnosticar", help="Caso 2: diagnóstico de un PDV")
     d.add_argument("pdv", help="GUID de la sucursal o un prefijo único (ej. A9D75316)")
     d.add_argument("--mes", help="Mes 'YYYY-MM' (por defecto, último mes completo)")
+    d.add_argument("--desde", help="Inicio de la ventana 'YYYY-MM-DD' (con --hasta)")
+    d.add_argument("--hasta", help="Fin de la ventana 'YYYY-MM-DD' (con --desde)")
     d.add_argument("--json", action="store_true", help="Salida en JSON")
     d.set_defaults(func=cmd_diagnosticar)
 
-    m = sub.add_parser("plan-mensual", help="Caso 5: plan mensual rankeado (Markdown)")
+    m = sub.add_parser("plan-mensual", help="Caso 5: plan de diagnóstico rankeado (Markdown)")
     m.add_argument("--mes", help="Mes 'YYYY-MM' (por defecto, último mes completo)")
+    m.add_argument("--desde", help="Inicio de la ventana 'YYYY-MM-DD' (con --hasta)")
+    m.add_argument("--hasta", help="Fin de la ventana 'YYYY-MM-DD' (con --desde)")
     m.add_argument("--out", help="Archivo de salida (por defecto, stdout)")
     m.add_argument("--json", action="store_true", help="Salida en JSON")
     m.set_defaults(func=cmd_plan_mensual)

@@ -15,13 +15,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TypedDict
 
-from ..kpi import latest_month, list_pdvs
+from ..kpi import Periodo, list_pdvs, periodo_por_defecto
 from .auditor_rag import _parse_json
 from .caso2 import Caso2Result, DiagnosticadorPDV
 
 SINTESIS_PROMPT = """Sos el supervisor regional de una cadena de heladerías. Tenés los
-diagnósticos del mes para cada sucursal (con su desvío de KPIs y la acción fundada en el
-manual). Redactá la SÍNTESIS ejecutiva del mes, BREVE y accionable.
+diagnósticos del período para cada sucursal (con su desvío de KPIs y la acción fundada en
+el manual). Redactá la SÍNTESIS ejecutiva del período, BREVE y accionable.
 
 Reglas:
 - Basate SOLO en los diagnósticos provistos. No inventes cifras ni sucursales.
@@ -34,13 +34,13 @@ Respondé SOLO JSON (sin texto extra):
                       "recomendacion": "<acción transversal breve>"}}],
   "prioridades": ["<acción prioritaria breve>", ...]}}
 
-DIAGNÓSTICOS DEL MES ({mes}):
+DIAGNÓSTICOS DEL PERÍODO ({periodo}):
 {diagnosticos}
 """
 
 
 class Caso5State(TypedDict, total=False):
-    mes: str
+    periodo: Periodo
     pdvs: list[str]
     resultados: list[Caso2Result]
     reporte: str
@@ -48,7 +48,7 @@ class Caso5State(TypedDict, total=False):
 
 @dataclass
 class PlanMensualResult:
-    mes: str
+    periodo: str               # etiqueta del período analizado ('YYYY-MM' o rango)
     resultados: list[Caso2Result] = field(default_factory=list)  # ya ordenados por severidad
     reporte: str = ""
 
@@ -99,15 +99,15 @@ class PlanificadorMensual:
 
     # --- nodos ---
     def _diagnosticos(self, state: Caso5State) -> dict:
-        mes = state["mes"]
+        periodo = state["periodo"]
         pdvs = state.get("pdvs") or list_pdvs(self.con)
-        resultados = [self.diag.diagnosticar(p, mes) for p in pdvs]
+        resultados = [self.diag.diagnosticar(p, periodo) for p in pdvs]
         # Orden: desvíos primero (por prioridad/severidad), abstenciones al final.
         resultados.sort(key=lambda r: r.orden)
         return {"resultados": resultados, "pdvs": pdvs}
 
     def _sintetizar(self, state: Caso5State) -> dict:
-        mes = state["mes"]
+        periodo: Periodo = state["periodo"]
         resultados: list[Caso2Result] = state["resultados"]
         accionables = [r for r in resultados if not r.abstuvo]
 
@@ -120,7 +120,7 @@ class PlanificadorMensual:
                 f"{r.desvio.detalle} Diagnóstico: {r.diagnostico[:220]}"
                 for r in accionables)
             sintesis = _parse_json(self.llm.complete(
-                SINTESIS_PROMPT.format(mes=mes, diagnosticos=bloque))) or {}
+                SINTESIS_PROMPT.format(periodo=periodo.etiqueta, diagnosticos=bloque))) or {}
 
         # Fallback determinístico: si la síntesis (LLM) no trae prioridades, derivarlas
         # de las sucursales accionables en orden de severidad. El reporte nunca queda
@@ -129,16 +129,16 @@ class PlanificadorMensual:
             sintesis["prioridades"] = [
                 f"{r.pdv[:8]} ({r.desvio.titulo}): {r.accion[:160]}" for r in accionables]
 
-        return {"reporte": self._render_markdown(mes, resultados, sintesis)}
+        return {"reporte": self._render_markdown(periodo.etiqueta, resultados, sintesis)}
 
     # --- render determinístico (cifras y citas exactas) ---
-    def _render_markdown(self, mes: str, resultados: list[Caso2Result],
+    def _render_markdown(self, periodo: str, resultados: list[Caso2Result],
                          sintesis: dict) -> str:
         n_diag = sum(1 for r in resultados if not r.abstuvo)
         n_sin_norma = sum(1 for r in resultados if r.abstuvo and r.desvio is not None)
         n_ok = sum(1 for r in resultados if r.desvio is None)
         L: list[str] = []
-        L.append(f"# Plan mensual de diagnóstico operativo — {mes}")
+        L.append(f"# Plan de diagnóstico operativo — {periodo}")
         L.append("")
         L.append(f"_{len(resultados)} sucursales · {n_diag} con acción · "
                  f"{n_sin_norma} con desvío sin norma · {n_ok} sin desvío_")
@@ -199,13 +199,19 @@ class PlanificadorMensual:
         return "\n".join(L).rstrip() + "\n"
 
     # --- API pública ---
-    def generar(self, mes: str | None = None,
+    def generar(self, periodo: Periodo | str | None = None,
                 pdvs: list[str] | None = None) -> PlanMensualResult:
-        """Genera el plan mensual ('YYYY-MM'; por defecto, último mes completo)."""
-        mes = mes or latest_month(self.con, complete_only=True)
-        init: Caso5State = {"mes": mes}
+        """Genera el plan de diagnóstico para un período.
+
+        ``periodo`` admite un :class:`Periodo` (ventana de fechas), un 'YYYY-MM'
+        (atajo de mes) o None (último mes completo disponible).
+        """
+        periodo = (Periodo.coerce(periodo) if periodo is not None
+                   else periodo_por_defecto(self.con))
+        init: Caso5State = {"periodo": periodo}
         if pdvs:
             init["pdvs"] = pdvs
         s = self.app.invoke(init)
-        return PlanMensualResult(mes=mes, resultados=s.get("resultados", []),
+        return PlanMensualResult(periodo=periodo.etiqueta,
+                                 resultados=s.get("resultados", []),
                                  reporte=s.get("reporte", ""))
