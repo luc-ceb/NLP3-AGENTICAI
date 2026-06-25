@@ -111,9 +111,15 @@ print(plan.generar("2026-04").reporte)
 La CLI espera `data/gdo.duckdb` (hechos de ventas) y `data/index/` (índice del
 manual: `meta.jsonl`, `bm25.pkl`, `dense.faiss`, `dense.json`).
 
-- **Datos:** `datos-ventas.xlsx` (line-item, 6 sucursales, ~190 productos,
-  abr-2025 → may-2026) cargados a DuckDB. *La comparación interanual existe para
-  2026-01…05; meses/sucursales sin año previo caen al comparativo vs red.*
+- **Ventas:** `df_ventas.parquet` (agregado diario por sucursal·producto) cargado
+  a la tabla canónica `datos_ventas` con `python scripts/etl_ventas.py`. *La
+  comparación interanual existe para 2026-01…05; meses/sucursales sin año previo
+  caen al comparativo vs red.*
+- **Encuestas:** `encuestas_satisfaccion.csv` / `encuestas_insatisfaccion.csv`
+  (texto libre del cliente) cargadas a `encuestas_buena_experiencia` /
+  `encuestas_mala_experiencia` con `python scripts/etl_encuestas.py`. Traen la
+  columna `numero` (código de sucursal) que une directo con `datos_ventas.numero`;
+  el `email` también está pero es nulo en ~50% de los casos.
 - **Manual:** `manual_operativo_completo.md` chunkeado por Tema (con metadatos de
   SECCIÓN) e indexado. Si el denso FAISS quedara desincronizado con
   `meta.jsonl`/`bm25.pkl`, reconstruilo con:
@@ -155,5 +161,7 @@ Métricas IR formales (Hit@k, MRR, nDCG) quedan en `src/eval/metrics.py`.
 
 ## Fuera de alcance (fases siguientes)
 
-Encuestas de clientes, clasificador de temas / router (Caso 1), Text-to-SQL y
-tiers FAST/REASON.
+Clasificador de temas / router de encuestas (Caso 1), Text-to-SQL en el camino de
+KPIs y tiers FAST/REASON. *Los datos de encuestas ya están cargados y son
+consultables por el analista; lo que queda pendiente es el flujo agéntico que las
+explota.*

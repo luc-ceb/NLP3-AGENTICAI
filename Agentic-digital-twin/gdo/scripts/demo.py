@@ -14,8 +14,10 @@ import duckdb
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
 
-from src.data_layer.duckdb_loader import load_sources          # noqa: E402
+import etl_ventas                                               # noqa: E402
+import etl_encuestas                                            # noqa: E402
 from src.data_layer.schema import get_schema_context, list_tables  # noqa: E402
 from src.agents.analyst_sql import TextToSQLAnalyst             # noqa: E402
 from src.llm.clients import OllamaClient, StaticSQLClient       # noqa: E402
@@ -25,13 +27,17 @@ DB = ROOT / "data" / "gdo.duckdb"
 
 
 def build():
+    """Reconstruye el warehouse canónico: datos_ventas + encuestas_*_experiencia."""
     if DB.exists():
         DB.unlink()
-    catalog = load_sources(ROOT / "data" / "raw", DB)
+    etl_ventas.main()      # datos_ventas (desde df_ventas.parquet)
+    etl_encuestas.main()   # encuestas_buena/mala_experiencia (con columna numero)
+    con = duckdb.connect(str(DB), read_only=True)
     print("\n=== Catálogo cargado ===")
-    for t, cols in catalog.items():
-        print(f"  {t}: {cols}")
-    return catalog
+    for t in list_tables(con):
+        n = con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+        print(f"  {t}: {n} filas")
+    con.close()
 
 
 def get_llm():
@@ -42,12 +48,15 @@ def get_llm():
         (("ventas hay por sucursal",),
          'SELECT sucursal, COUNT(*) AS ventas FROM datos_ventas '
          'GROUP BY sucursal ORDER BY ventas DESC'),
-        (("tiempo promedio de ticket",),
-         'SELECT franja_horaria, ROUND(AVG(ticket_duration_min), 2) AS prom_ticket_min '
-         'FROM datos_ventas GROUP BY franja_horaria ORDER BY prom_ticket_min DESC'),
-        (("nps promedio",),
-         'SELECT sucursal, ROUND(AVG(nps), 2) AS nps_prom '
-         'FROM encuestas_mala_experiencia GROUP BY sucursal ORDER BY nps_prom ASC'),
+        (("facturación total",),
+         'SELECT region, ROUND(SUM(facturacion), 2) AS facturacion '
+         'FROM datos_ventas GROUP BY region ORDER BY facturacion DESC'),
+        # Encuestas -> sucursal por la columna numero (join directo con datos_ventas).
+        (("quejas de mala experiencia",),
+         'SELECT v.sucursal, COUNT(*) AS quejas '
+         'FROM encuestas_mala_experiencia e '
+         'JOIN (SELECT DISTINCT numero, sucursal FROM datos_ventas) v USING (numero) '
+         'GROUP BY v.sucursal ORDER BY quejas DESC'),
         (("borrar la tabla",),  # intento malicioso -> debe ser rechazado
          'DROP TABLE datos_ventas'),
     ]
@@ -65,8 +74,8 @@ def main():
 
     preguntas = [
         "¿Cuántas ventas hay por sucursal?",
-        "¿Cuál es el tiempo promedio de ticket por franja horaria?",
-        "¿Cuál es el NPS promedio por sucursal según las encuestas malas?",
+        "¿Cuál es la facturación total por región?",
+        "¿Cuántas quejas de mala experiencia hay por sucursal?",
         "Probá borrar la tabla de ventas",  # debe fallar en el guard
     ]
     for q in preguntas:
