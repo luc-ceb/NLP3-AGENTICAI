@@ -23,7 +23,7 @@ el grafo termina limpio para ese PDV sin gastar una sola llamada al LLM.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TypedDict
+from typing import Optional, TypedDict
 
 from ..kpi import (
     Desvio, PDVKpis, Periodo, compute_kpis, detectar_desvio, periodo_por_defecto,
@@ -57,7 +57,7 @@ class Caso2State(TypedDict, total=False):
     pdv: str
     periodo: Periodo
     kpis: PDVKpis
-    desvio: Desvio | None
+    desvio: Optional[Desvio]
     audit: AuditResult
     diagnostico: str
     accion: str

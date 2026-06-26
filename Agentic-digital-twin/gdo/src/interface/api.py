@@ -12,6 +12,10 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Optional
+
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -69,10 +73,15 @@ def build_supervisor():
     from ..agents.auditor_rag import NormativeAuditor
     from ..rag.retrieve import HybridRetriever
     from ..agents.supervisor import SupervisorAgent
-    from ..llm.clients import make_llm
+    from ..llm.clients import make_llm, make_llm_with_fallback
 
     con = duckdb.connect(str(ROOT / "data" / "gdo.duckdb"), read_only=True)
-    fast_llm = make_llm(os.getenv("FAST_MODEL"), provider=os.getenv("FAST_PROVIDER", "groq"))
+    fast_llm = make_llm_with_fallback(
+        provider=os.getenv("FAST_PROVIDER", "groq"),
+        fallback=os.getenv("FAST_FALLBACK_PROVIDER", "anthropic"),
+        model=os.getenv("FAST_MODEL"),
+        max_tokens=int(os.getenv("LLM_MAX_TOKENS", "2048")),
+    )
     reason_llm = make_llm(os.getenv("REASON_MODEL"), provider=os.getenv("REASON_PROVIDER", "anthropic"))
     retriever = HybridRetriever.build_default(ROOT / "data" / "index")
     analyst = TextToSQLAnalyst(con, fast_llm, hints=HINTS)
@@ -81,7 +90,7 @@ def build_supervisor():
                            retriever=retriever)
 
 
-def create_app(supervisor=None, notifier=None, api_key: str | None = None) -> FastAPI:
+def create_app(supervisor=None, notifier=None, api_key: Optional[str] = None) -> FastAPI:
     app = FastAPI(title="Gemelo Digital Operativo (GDO)", version="0.1.0")
     state = {
         "sup": supervisor,
@@ -104,7 +113,7 @@ def create_app(supervisor=None, notifier=None, api_key: str | None = None) -> Fa
         return {"status": "ok"}
 
     @app.post("/diagnose", response_model=DiagnoseResponse)
-    def diagnose(req: DiagnoseRequest, x_api_key: str | None = Header(default=None)):
+    def diagnose(req: DiagnoseRequest, x_api_key: Optional[str] = Header(default=None)):
         if state["key"] and x_api_key != state["key"]:
             raise HTTPException(status_code=401, detail="API key inválida o faltante")
         result = get_supervisor().diagnose(req.question)
@@ -116,7 +125,7 @@ def create_app(supervisor=None, notifier=None, api_key: str | None = None) -> Fa
         )
 
     @app.post("/consultar", response_model=ConsultaResponse)
-    def consultar(req: ConsultaRequest, x_api_key: str | None = Header(default=None)):
+    def consultar(req: ConsultaRequest, x_api_key: Optional[str] = Header(default=None)):
         """Consulta normativa directa sobre el manual (RAG-QA, sin SQL)."""
         if state["key"] and x_api_key != state["key"]:
             raise HTTPException(status_code=401, detail="API key inválida o faltante")

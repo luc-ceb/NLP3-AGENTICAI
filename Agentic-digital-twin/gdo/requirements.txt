@@ -16,6 +16,9 @@ rank-bm25>=0.2
 faiss-cpu>=1.10        # índice denso local (VECTOR_BACKEND=faiss, default)
 sentence-transformers>=5.0   # embeddings (trae torch/transformers transitivamente)
 
+# --- Config ---
+python-dotenv>=1.0
+
 # --- Interfaces ---
 fastapi>=0.136
 uvicorn>=0.48

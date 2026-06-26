@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from typing import TypedDict
+from typing import Optional, TypedDict
 
 from ..kpi import Periodo
 from .auditor_rag import AuditResult, _parse_json
@@ -100,8 +100,9 @@ CONTEXTO NORMATIVO (pasajes del manual con su cita entre corchetes):
 
 class Caso1State(TypedDict, total=False):
     tabla: str                          # 'mala' | 'buena'
-    periodo: Periodo | None
-    limite: int | None
+    pdv: str                            # branchofficeid (opcional, filtra por sucursal)
+    periodo: Optional[Periodo]
+    limite: Optional[int]
     quejas: list[tuple[str, str]]       # (numero_sucursal, texto)
     temas: list[str]                    # tema por queja (paralelo a `quejas`)
     conteo: dict[str, int]              # tema -> cantidad
@@ -206,6 +207,15 @@ class ClasificadorEncuestas:
                "WHERE origen_respuesta_texto IS NOT NULL "
                "AND length(trim(origen_respuesta_texto)) > 3")
         params: list = []
+        pdv = state.get("pdv")
+        if pdv:
+            row = self.con.execute(
+                "SELECT DISTINCT numero FROM datos_ventas WHERE branchofficeid = ? LIMIT 1",
+                [pdv]).fetchone()
+            if not row:
+                return {"quejas": []}
+            sql += " AND numero = ?"
+            params.append(row[0])
         periodo = state.get("periodo")
         if periodo is not None:
             sql += " AND CAST(origen_fhrespuesta AS DATE) BETWEEN ? AND ?"
@@ -288,18 +298,23 @@ class ClasificadorEncuestas:
     # --- API pública ---
     def clasificar(self, tabla: str = "mala",
                    periodo: Periodo | str | None = None,
-                   limite: int | None = None) -> Caso1Result:
+                   limite: int | None = None,
+                   pdv: str | None = None) -> Caso1Result:
         """Clasifica las encuestas de una tabla y rutea el tema dominante al manual.
 
         Args:
             tabla: 'mala' (insatisfacción) o 'buena' (satisfacción).
             periodo: ``Periodo``, 'YYYY-MM' o None (sin filtro temporal).
             limite: tope de quejas a clasificar (las más recientes), para acotar costo.
+            pdv: branchofficeid de la sucursal (None = todas las sucursales).
         """
         if tabla not in self.TABLAS:
             raise ValueError(f"tabla inválida: {tabla!r} (usá 'mala' o 'buena').")
         per = Periodo.coerce(periodo) if periodo is not None else None
-        s = self.app.invoke({"tabla": tabla, "periodo": per, "limite": limite})
+        init: dict = {"tabla": tabla, "periodo": per, "limite": limite}
+        if pdv:
+            init["pdv"] = pdv
+        s = self.app.invoke(init)
 
         total = len(s.get("quejas", []))
         dominante = s.get("dominante", "")

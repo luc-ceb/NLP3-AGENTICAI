@@ -29,6 +29,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+from dotenv import load_dotenv          # noqa: E402
+load_dotenv(ROOT / ".env", override=True)
+
 DB = ROOT / "data" / "gdo.duckdb"
 INDEX = ROOT / "data" / "index"
 
@@ -148,6 +151,27 @@ def cmd_plan_mensual(args) -> int:
     return 0
 
 
+def cmd_diagnosticar_combinado(args) -> int:
+    from ..agents.caso3 import DiagnosticadorCombinado
+    con = _connect()
+    pdv = _resolve_pdv(con, args.pdv)
+    llm = _build_llm()
+    diag = DiagnosticadorCombinado(con, _build_auditor(_build_retriever(), llm), llm)
+    r = diag.diagnosticar(pdv, _periodo_from_args(args))
+
+    if args.json:
+        print(json.dumps({
+            "pdv": r.pdv, "periodo": r.periodo, "abstuvo": r.abstuvo, "motivo": r.motivo,
+            "desvio": (r.desvio.detalle if r.desvio else None),
+            "n_quejas": r.n_quejas, "tema_quejas": r.tema_quejas,
+            "severidad": r.severidad, "verdict": r.verdict,
+            "diagnostico": r.diagnostico, "accion": r.accion, "citas": r.citas,
+        }, ensure_ascii=False, indent=2))
+    else:
+        print(r)
+    return 0
+
+
 def cmd_clasificar_encuestas(args) -> int:
     from ..agents.caso1 import ClasificadorEncuestas
     con = _connect()
@@ -203,6 +227,15 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--out", help="Archivo de salida (por defecto, stdout)")
     m.add_argument("--json", action="store_true", help="Salida en JSON")
     m.set_defaults(func=cmd_plan_mensual)
+
+    cb = sub.add_parser("diagnosticar-combinado",
+                        help="Caso 3: diagnóstico combinado ventas + encuestas de un PDV")
+    cb.add_argument("pdv", help="GUID de la sucursal o prefijo único")
+    cb.add_argument("--mes", help="Mes 'YYYY-MM' (por defecto, último mes completo)")
+    cb.add_argument("--desde", help="Inicio de la ventana 'YYYY-MM-DD' (con --hasta)")
+    cb.add_argument("--hasta", help="Fin de la ventana 'YYYY-MM-DD' (con --desde)")
+    cb.add_argument("--json", action="store_true", help="Salida en JSON")
+    cb.set_defaults(func=cmd_diagnosticar_combinado)
 
     c = sub.add_parser("clasificar-encuestas",
                        help="Caso 1: clasificar encuestas por tema y rutear al manual")
