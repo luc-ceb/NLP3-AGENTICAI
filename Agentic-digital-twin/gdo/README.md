@@ -53,6 +53,67 @@ pip install -r requirements.txt
 pip install groq anthropic langgraph faiss-cpu sentence-transformers fastapi uvicorn streamlit
 ```
 
+## Puesta en marcha en una PC nueva (clon)
+
+Al clonar el repo, el **código y las recetas** vienen; los **datos** y los
+**artefactos derivados** (base DuckDB, índice RAG) **no** — toda la carpeta
+`gdo/data/` está en `.gitignore`. Hay que regenerarlos en destino.
+
+Regla mental: del repo sale código; los datos y la base/índice los reconstruís vos.
+
+| Paso | ¿Viene en el repo? | Acción |
+|------|--------------------|--------|
+| Código (`src/`, `scripts/`) | sí | nada |
+| Dependencias | sí (`requirements.txt`) | `pip install` |
+| Claves de API | no (solo `.env.example`) | crear `.env` |
+| **Datos crudos** (`data/raw/`) | **no — gitignored** | **copiar a mano** |
+| Base DuckDB + índice | no — gitignored | **regenerar** (abajo) |
+| Modelos HuggingFace (embeddings, reranker) | no | se descargan solos la 1ª vez |
+
+**1. Entorno** (probado con Python 3.12):
+
+```bash
+cd gdo
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**2. Claves:** `cp .env.example .env` y completá `GROQ_API_KEY` / `ANTHROPIC_API_KEY`.
+
+**3. Traer los datos crudos** (lo que más se olvida — no viaja en el repo). Copiá a
+`gdo/data/raw/`:
+
+```
+data/raw/
+├── df_ventas.parquet                 # ventas (agregado diario por sucursal·producto)
+├── encuestas_satisfaccion.csv        # encuestas "buena experiencia"
+├── encuestas_insatisfaccion.csv      # encuestas "mala experiencia"
+└── manual-operativo-general/         # manual operativo (Markdown) + recursos
+```
+
+**4. Regenerar base e índice** (los bloques A y B son independientes; necesitás ambos):
+
+```bash
+# (A) Hechos → DuckDB (data/gdo.duckdb)
+python scripts/etl_ventas.py        # tabla datos_ventas
+python scripts/etl_encuestas.py     # encuestas_buena/mala_experiencia
+
+# (B) Conocimiento → índice RAG (data/index/)
+python scripts/ingest_kb.py         # data/raw → data/processed/chunks.jsonl
+python scripts/build_index.py       # chunks.jsonl → FAISS + BM25
+```
+
+> `rebuild_faiss.py` **no** es para esto: solo resincroniza el denso si quedó
+> desfasado del `meta.jsonl`. La 1ª corrida del RAG descarga `all-MiniLM-L6-v2` y el
+> Cross-Encoder (~80 MB) desde HuggingFace (requiere internet esa vez).
+
+**5. Verificar:**
+
+```bash
+python -m src.interface.cli eval                                   # chequeos sin LLM
+VECTOR_BACKEND=faiss python -m src.interface.cli clasificar-encuestas --limite 20
+```
+
 ## Configuración
 
 Copiá `.env.example` a `.env` y completá las claves. El LLM usa **Groq por
