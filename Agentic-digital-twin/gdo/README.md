@@ -12,6 +12,12 @@ la norma y redactar el diagnóstico, siempre con citas reales.
 
 ## Qué hace
 
+- **Caso 1 — Clasificador / router de encuestas.** Clasifica el texto libre de
+  las encuestas en un **único tema** (taxonomía fija de 9 categorías), agrega el
+  volumen por tema (y por sucursal) y **rutea el tema dominante al manual**
+  (NormativeAuditor) para producir una acción correctiva citada — o se abstiene si
+  el tema es `otros` o ninguna norma aplica. La clasificación se hace en lotes
+  (pocas llamadas, no una por queja) y la auditoría RAG corre una sola vez.
 - **Caso 2 — Diagnóstico de una sucursal.** Calcula KPIs de volumen/tráfico,
   detecta el desvío más relevante con reglas, recupera las secciones pertinentes
   del manual (RAG) y redacta diagnóstico + acción con cita, o se abstiene.
@@ -74,6 +80,11 @@ casos se compara contra el **mismo período del año anterior**. Por defecto, el
 anterior, el interanual se suprime y el desvío cae al comparativo vs red.*
 
 ```bash
+# Caso 1 — clasificar encuestas por tema y rutear el dominante al manual
+python -m src.interface.cli clasificar-encuestas --tabla mala
+python -m src.interface.cli clasificar-encuestas --limite 100 --mes 2026-04
+python -m src.interface.cli clasificar-encuestas --json
+
 # Caso 2 — diagnóstico de una sucursal
 python -m src.interface.cli diagnosticar 0008C682 --mes 2026-04
 python -m src.interface.cli diagnosticar 0008C682 --desde 2026-01-01 --hasta 2026-05-31
@@ -138,7 +149,7 @@ manual: `meta.jsonl`, `bm25.pkl`, `dense.faiss`, `dense.json`).
 
 ```
 src/kpi/         KPIs determinísticos (metrics) y detección de desvíos (deviations)
-src/agents/      caso2 (DiagnosticadorPDV), caso5 (PlanificadorMensual), auditor_rag (CRAG)
+src/agents/      caso1 (ClasificadorEncuestas), caso2 (DiagnosticadorPDV), caso5 (PlanificadorMensual), auditor_rag (CRAG)
 src/rag/         recuperación híbrida (BM25 + denso FAISS), fusión, reranker
 src/llm/         clientes LLM (Groq/Anthropic/Ollama) + respaldo automático
 src/interface/   cli (entrada principal), api (FastAPI), app (Streamlit)
@@ -168,7 +179,6 @@ Métricas IR formales (Hit@k, MRR, nDCG) quedan en `src/eval/metrics.py`.
 
 ## Fuera de alcance (fases siguientes)
 
-Clasificador de temas / router de encuestas (Caso 1), Text-to-SQL en el camino de
-KPIs y tiers FAST/REASON. *Los datos de encuestas ya están cargados y son
-consultables por el analista; lo que queda pendiente es el flujo agéntico que las
-explota.*
+Text-to-SQL en el camino de KPIs y tiers FAST/REASON. *El Caso 1 (clasificador /
+router de encuestas) ya está implementado; el path Text-to-SQL existe como demo
+(`scripts/diagnose_demo.py`) pero aún no está integrado a la CLI.*

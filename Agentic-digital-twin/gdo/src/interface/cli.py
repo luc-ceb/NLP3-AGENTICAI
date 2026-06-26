@@ -148,6 +148,28 @@ def cmd_plan_mensual(args) -> int:
     return 0
 
 
+def cmd_clasificar_encuestas(args) -> int:
+    from ..agents.caso1 import ClasificadorEncuestas
+    con = _connect()
+    llm = _build_llm()
+    clf = ClasificadorEncuestas(con, _build_auditor(_build_retriever(), llm), llm,
+                                batch=args.batch)
+    r = clf.clasificar(tabla=args.tabla, periodo=_periodo_from_args(args),
+                       limite=args.limite)
+
+    if args.json:
+        print(json.dumps({
+            "tabla": r.tabla, "periodo": r.periodo, "total": r.total,
+            "ranking": [{"tema": t, "n": n} for t, n in r.ranking()],
+            "por_sucursal": r.por_sucursal, "dominante": r.dominante,
+            "abstuvo": r.abstuvo, "motivo": r.motivo, "verdict": r.verdict,
+            "recomendacion": r.recomendacion, "accion": r.accion, "citas": r.citas,
+        }, ensure_ascii=False, indent=2))
+    else:
+        print(r)
+    return 0
+
+
 def cmd_eval(args) -> int:
     from ..eval.checks import run_checks
     con = _connect()
@@ -181,6 +203,20 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--out", help="Archivo de salida (por defecto, stdout)")
     m.add_argument("--json", action="store_true", help="Salida en JSON")
     m.set_defaults(func=cmd_plan_mensual)
+
+    c = sub.add_parser("clasificar-encuestas",
+                       help="Caso 1: clasificar encuestas por tema y rutear al manual")
+    c.add_argument("--tabla", choices=["mala", "buena"], default="mala",
+                   help="Encuestas a clasificar (por defecto, 'mala')")
+    c.add_argument("--mes", help="Mes 'YYYY-MM' (filtra por fecha de respuesta)")
+    c.add_argument("--desde", help="Inicio de la ventana 'YYYY-MM-DD' (con --hasta)")
+    c.add_argument("--hasta", help="Fin de la ventana 'YYYY-MM-DD' (con --desde)")
+    c.add_argument("--limite", type=int,
+                   help="Tope de quejas a clasificar (las más recientes), para acotar costo")
+    c.add_argument("--batch", type=int, default=25,
+                   help="Quejas por llamada de clasificación (por defecto, 25)")
+    c.add_argument("--json", action="store_true", help="Salida en JSON")
+    c.set_defaults(func=cmd_clasificar_encuestas)
 
     e = sub.add_parser("eval", help="Chequeos livianos de comportamiento")
     e.add_argument("--mes", help="Mes 'YYYY-MM' (por defecto, último mes completo)")
