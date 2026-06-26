@@ -182,3 +182,142 @@ Métricas IR formales (Hit@k, MRR, nDCG) quedan en `src/eval/metrics.py`.
 Text-to-SQL en el camino de KPIs y tiers FAST/REASON. *El Caso 1 (clasificador /
 router de encuestas) ya está implementado; el path Text-to-SQL existe como demo
 (`scripts/diagnose_demo.py`) pero aún no está integrado a la CLI.*
+
+---
+
+# Apéndice — Diseño original y consigna (PLN III)
+
+Esta sección preserva el diseño y el contexto académico del proyecto
+(**Procesamiento de Lenguaje Natural III — FIUBA / CEIA**). Describe la *visión*
+completa del sistema; donde difiere de lo implementado, se aclara qué es **MVP**
+(en la CLI) y qué quedó como **diseño/diferido**.
+
+## Objetivo y concepto de "gemelo digital"
+
+Construir un **gemelo digital operativo (GDO)** por punto de venta (PDV) que cruce
+*qué ocurrió en la realidad* (hechos: ventas y encuestas) contra *qué dice la norma*
+(base de conocimiento: manual operativo + `recursos/`), produciendo un **diagnóstico
+fundamentado con citación direccionable** y disparando una **acción automática**.
+
+El gemelo se materializa como un **objeto de estado por PDV** que combina capas:
+
+| Capa | Fuente | Naturaleza |
+|---|---|---|
+| Perfil estructural | diseño funcional de tiendas, capacidad de frío | Estático (configuración del local) |
+| Hechos dinámicos | `df_ventas.parquet`, encuestas +/− | Transaccional / serie temporal |
+| Norma aplicable | `manual_operativo_completo.md`, `recursos/` | Conocimiento gobernante (RAG) |
+
+Pregunta típica: *"¿Por qué cayó la satisfacción en una sucursal?"* → detecta el
+desvío en los datos, lo contrasta con el protocolo, y devuelve causa raíz + acción
+correctiva citada.
+
+## Arquitectura multi-agente (visión)
+
+Patrón **ReAct sobre LangGraph** con un Supervisor que orquesta dos agentes
+especializados y reconcilia realidad vs norma:
+
+| Agente | Rol | Entrada | Salida | Mecanismo |
+|---|---|---|---|---|
+| Supervisor | Planificador / reconciliador | Consulta + estado del twin | Plan + diagnóstico final | ReAct + reflexión (CRAG) |
+| Analista | Cuantificar la realidad | Pregunta NL | Tabla de hechos + SQL ejecutado | Text-to-SQL con validación de schema |
+| Auditor Normativo | Recuperar y verificar la norma | Sub-pregunta + hechos | Protocolo + cita + veredicto cumple/no | RAG híbrido + grader |
+
+**Comunicación:** estado compartido en LangGraph + mensajes estructurados
+(`claim`, `evidence`, `source`, `confidence`). **Auto-evaluación:** grader de
+recuperación + nodo de reflexión que verifica que cada afirmación del reporte esté
+respaldada por evidencia citada (estilo Self-RAG).
+
+> **MVP vs diseño.** La CLI implementa el camino **determinístico** (KPIs por SQL
+> fijo → detección de desvíos por reglas → Auditor RAG → síntesis citada) para los
+> Casos 1, 2 y 5. El **Supervisor + Analista Text-to-SQL** con reconciliación y
+> ruteo de consulta vive como demo (`scripts/diagnose_demo.py`), aún no integrado a
+> la CLI. El `TwinState` Pydantic y las señales de un modelo predictivo
+> (churn/ventas) quedaron **diferidos**.
+
+## RAG avanzado (Auditor Normativo)
+
+Pipeline pre-retrieval → retrieval → post-retrieval:
+
+1. **Ingesta/indexación:** chunking por estructura (headers markdown) con metadatos
+   (`doc_id`, `section/tema`, `source`, `tipo_doc`). Índice **doble**: denso
+   (`all-MiniLM-L6-v2`, coseno, FAISS local — Pinecone opcional) + **BM25** sobre los
+   mismos chunks.
+2. **Recuperación híbrida:** BM25 y denso en paralelo (top-k cada uno).
+3. **Fusión RRF:** Reciprocal Rank Fusion `1/(k+rank)` sin normalizar puntajes.
+4. **Re-ranking:** **Cross-Encoder** (MS MARCO MiniLM) sobre pares `(query, chunk)`.
+5. **Diversidad:** `per_doc_cap` + dedup por `doc_id`.
+6. **Contexto citable:** cada pasaje se arma con `[source, sección]` → **citación
+   direccionable**.
+
+**Variante:** **Agentic RAG + Corrective RAG (CRAG)** — el agente decide *cuándo*
+recuperar y un grader clasifica el contexto `correcto / ambiguo / incorrecto`;
+si es flojo, reescribe la query y reintenta.
+
+## Seguridad
+
+- **Control de acceso:** API key por header en FastAPI; tokens desde `.env`, sin hardcode.
+- **Filtrado de inputs:** Text-to-SQL **read-only** sobre DuckDB + allow-list de
+  tablas (previene inyección y operaciones destructivas) — ver `src/security/`.
+- **Validación de outputs:** SQL validado contra el schema antes de ejecutar; salidas
+  estructuradas en JSON; chequeo de "toda afirmación citada".
+- **Auditoría:** logging estructurado de query, fuente recuperada y acción disparada.
+
+## Optimización de costos y latencia
+
+- **Model routing:** consultas simples → LLM liviano; reconciliación compleja →
+  modelo mayor (en la práctica, Groq primario con respaldo Anthropic ante rate-limit).
+- **Caching** de embeddings y respuestas frecuentes; **compresión de contexto**
+  (resumen de chunks); **batching** de embeddings en la ingesta; control de
+  `temperature`/`token_limit` por agente.
+- **Ruteo eficiente del grafo:** los nodos de KPIs y detección son SQL+reglas; sin
+  desvío relevante el grafo abstiene **sin gastar una llamada al LLM**.
+
+## Acción final automática
+
+Actuador de salida (`src/actions/notifier.py`): `LogNotifier` registra cada
+diagnóstico como línea JSONL en un log externo. Extensible a **Email** (SMTP/Gmail) o
+**Slack/Webhook** implementando la misma interfaz.
+
+## Evaluación — taxonomía de métricas (referencia)
+
+Más allá de los chequeos livianos (`src/eval/checks.py`) y las métricas IR
+(`src/eval/metrics.py`), la batería completa de referencia abarca:
+
+- **Retrieval:** Recall@k (meta ≥0.85@20), nDCG@k, MRR, Hit@k, diversidad/dedup, latencia p50/p95.
+- **Contexto:** Context Precision/Recall, % de citación direccionable, compresión efectiva.
+- **Generación:** EM/F1 sobre ground truth, Faithfulness/Attribution, hallucination rate, abstención correcta, % de SQL válido.
+- **Re-rank/Fusión:** nDCG lift del Cross-Encoder; ganancia del híbrido (RRF) vs cada señal.
+- **Agentes:** coherencia de decisiones, calidad del diálogo, redundancia evitada, latencia.
+- **Robustez/seguridad:** caída ante paráfrasis/typos, OOD, filtrado de PII, resistencia a jailbreak.
+- **Operación (SLOs):** latencia end-to-end p50/p95, costo por respuesta (tokens/$), tasa de errores.
+
+*Set sugerido:* ~20-30 preguntas operativas con ground truth (chunk correcto +
+respuesta esperada), generadas semiautomáticamente del manual y revisadas a mano.
+
+## Stack tecnológico
+
+| Componente | Herramienta |
+|---|---|
+| Orquestación de agentes | LangGraph / LangChain |
+| LLM | Groq (primario) + Anthropic (respaldo) · Ollama (local) |
+| Embeddings | `all-MiniLM-L6-v2` (HuggingFace) |
+| Vector store | FAISS (local) · Pinecone (opcional) |
+| Sparse retrieval | BM25 (`rank_bm25`) |
+| Re-ranker | Cross-Encoder MS MARCO MiniLM |
+| Datos / SQL | DuckDB + pandas |
+| API / Front | FastAPI + Streamlit |
+| Tests | pytest |
+
+## Mapeo requisito → componente (consigna)
+
+| Requisito de la consigna | Dónde se cumple | Estado |
+|---|---|---|
+| API funcional (FastAPI/Streamlit) | `src/interface/` | OK |
+| ≥2 agentes con comunicación dinámica + auto-evaluación | Supervisor + Analista + Auditor; Casos 1/2/5 | OK |
+| RAG (retriever-ranker, relevancia, trazabilidad) | `src/rag/` + Auditor (CRAG) | OK |
+| Medidas de seguridad | `src/security/` (read-only SQL, allow-list, auth) | OK |
+| Modelo preexistente para inferencia | Cross-Encoder de re-ranking (modelo preentrenado) · predictivo churn/ventas | Diferido / a confirmar |
+| Flujo modular completo y monitoreable | Arquitectura + estructura de código | OK |
+| Optimización de costos y latencia | Model routing, caching, abstención sin LLM | OK |
+| Acción final automática | `src/actions/notifier.py` (LogNotifier) | OK |
+| Evaluación y métricas | `src/eval/` (checks + métricas IR) | Parcial |
