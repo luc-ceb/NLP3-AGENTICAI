@@ -1,4 +1,0 @@
-.env
-
-# Generated monthly plan reports (Caso 5 --out)
-gdo/plan_*.md
